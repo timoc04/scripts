@@ -10,7 +10,7 @@ from ctypes import wintypes
 import sys
 
 # ===== Instellingen =====
-PIN = "2580"                 # Toegangscode
+PIN = "1423"                 # Toegangscode
 SCREEN_INDEX = 0             # 0 = primair, 1 = tweede, 2 = derde, ...
 BG_COLOR = "#111122"         # Achtergrond overlay
 
