@@ -1,8 +1,7 @@
-# overlay_lock.py  (v1.1 – lock button keep-alive + hogere Ontgrendel-knop)
-# - "🔒 Lock nu" knop rechtsonder op gekozen (bedienings)scherm
-# - Fullscreen overlay met numeriek touch-keypad
+# overlay_lock.py  (v1.2 – compact keypad + brede ONTGRENDEL-balk + lock-button keep-alive)
+# - Bediening op gekozen monitor met "🔒 Lock nu" rechts-onder, altijd zichtbaar
+# - Fullscreen overlay met numeriek keypad
 # - Geen auto-relock; handmatig lock/unlock
-# - Keep-alive houdt de Lock-knop altijd zichtbaar
 
 import tkinter as tk
 from tkinter import messagebox
@@ -12,22 +11,37 @@ import sys
 
 # ===== Instellingen =====
 PIN = "2580"                 # Toegangscode
-SCREEN_INDEX = 0             # 0 = primair, 1 = tweede, ...
-KEY_BTN_W = 8                # breedte (tk units) van keypadknoppen
-KEY_BTN_H = 3                # hoogte van keypadknoppen
-UNLOCK_BTN_W = 26            # breedte Ontgrendel
-UNLOCK_BTN_H = 3             # HOOGTE Ontgrendel (was 2)
-BG_COLOR = "#111122"         # overlay achtergrond
+SCREEN_INDEX = 0             # 0 = primair, 1 = tweede, 2 = derde, ...
+BG_COLOR = "#111122"         # Achtergrond overlay
+
+# Keypad-knoppen (compacter dan voorheen)
+KEY_BTN_FONT = ("Segoe UI", 24)
+KEY_BTN_W = 6                # breedte in tk "chars"
+KEY_BTN_H = 2                # hoogte in tk "rows"
+KEY_PADX = 6
+KEY_PADY = 6
+
+# Ontgrendel-balk (extra opvallend)
+UNLOCK_TEXT = "ONTGRENDEL"
+UNLOCK_FONT = ("Segoe UI", 28, "bold")
+UNLOCK_BG = "#3A6FF2"
+UNLOCK_FG = "white"
+UNLOCK_ACTIVE_BG = "#2E55B8"
+UNLOCK_BTN_W = 32            # extra breed
+UNLOCK_BTN_H = 4             # extra hoog
+
+# "Lock nu" knop (rechtsonder, keep-alive)
 LOCKBTN_W, LOCKBTN_H = 120, 36
 LOCKBTN_MARGIN = 20
-KEEP_ALIVE_MS = 1000         # elke 1s lock-knop bovenop houden
+KEEP_ALIVE_MS = 1000         # elke 1s bovenaan houden
 
-# ===== Win32 monitor info via ctypes =====
+# ===== Win32 monitor info =====
 user32 = ctypes.windll.user32
 user32.SetProcessDPIAware()
 
-MONITORENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_int, ctypes.c_ulong, ctypes.c_ulong,
-                                     ctypes.POINTER(wintypes.RECT), ctypes.c_double)
+MONITORENUMPROC = ctypes.WINFUNCTYPE(
+    ctypes.c_int, ctypes.c_ulong, ctypes.c_ulong, ctypes.POINTER(wintypes.RECT), ctypes.c_double
+)
 _monitors = []
 def _monitor_enum(hMonitor, hdcMonitor, lprcMonitor, dwData):
     r = lprcMonitor.contents
@@ -39,6 +53,7 @@ def get_monitors():
     user32.EnumDisplayMonitors(0, 0, MONITORENUMPROC(_monitor_enum), 0)
     return _monitors[:]
 
+# ===== App =====
 class DisplayLockApp:
     def __init__(self, root):
         self.root = root
@@ -60,11 +75,10 @@ class DisplayLockApp:
 
         self._build_overlay()
         self._build_lock_button()
-        self._keep_alive()  # start “altijd zichtbaar” loop
+        self._keep_alive()  # knop altijd zichtbaar houden
 
-    # ---------- Lock-knop ----------
+    # -------- Lock-knop ----------
     def _build_lock_button(self):
-        # bestaat al? toon en positioneer opnieuw
         if self.lock_btn_win and self.lock_btn_win.winfo_exists():
             self._place_lock_button()
             self.lock_btn_win.deiconify()
@@ -76,13 +90,14 @@ class DisplayLockApp:
         self.lock_btn_win.overrideredirect(True)
         self.lock_btn_win.attributes("-topmost", True)
         self.lock_btn_win.configure(bg="#F2F2F7")
-        # voorkomen dat OS hem “verstopt”: breng ‘m terug als hij ge-minimized is
         self.lock_btn_win.bind("<Unmap>", lambda e: self.lock_btn_win.after(50, self._show_lock_button))
         self.lock_btn_win.bind("<Map>",   lambda e: self._place_lock_button())
 
-        btn = tk.Button(self.lock_btn_win, text="🔒 Lock nu", font=("Segoe UI", 10),
-                        width=14, height=1, command=self.lock_now,
-                        relief="flat", bg="#F2F2F7", activebackground="#E6E6EC")
+        btn = tk.Button(
+            self.lock_btn_win, text="🔒 Lock nu", font=("Segoe UI", 10),
+            width=14, height=1, command=self.lock_now,
+            relief="flat", bg="#F2F2F7", activebackground="#E6E6EC"
+        )
         btn.pack()
         self._place_lock_button()
 
@@ -92,7 +107,6 @@ class DisplayLockApp:
         self.lock_btn_win.geometry(f"{LOCKBTN_W}x{LOCKBTN_H}+{x}+{y}")
 
     def _show_lock_button(self):
-        # Toon/maak opnieuw indien nodig
         try:
             if not (self.lock_btn_win and self.lock_btn_win.winfo_exists()):
                 self._build_lock_button()
@@ -105,11 +119,10 @@ class DisplayLockApp:
             self._build_lock_button()
 
     def _keep_alive(self):
-        # Elke seconde: lock-knop zichtbaar, gepositioneerd en topmost houden
         self._show_lock_button()
         self.root.after(KEEP_ALIVE_MS, self._keep_alive)
 
-    # ---------- Overlay ----------
+    # -------- Overlay ----------
     def _build_overlay(self):
         self.overlay = tk.Toplevel(self.root)
         self.overlay.withdraw()
@@ -126,9 +139,12 @@ class DisplayLockApp:
                             fg="#DDDDFF", bg=BG_COLOR, font=("Segoe UI", 18))
         subtitle.pack(pady=(0, 12))
 
+        # Masked display
         self.mask_var = tk.StringVar(value="")
-        display = tk.Label(self.overlay, textvariable=self.mask_var, fg="white", bg="#22223A",
-                           font=("Segoe UI", 32), width=26, height=1, padx=16, pady=10)
+        display = tk.Label(
+            self.overlay, textvariable=self.mask_var, fg="white", bg="#22223A",
+            font=("Segoe UI", 32), width=26, height=1, padx=16, pady=10
+        )
         display.pack(pady=(0, 24))
 
         # Keypad
@@ -141,18 +157,23 @@ class DisplayLockApp:
         for row in labels:
             fr = tk.Frame(self.overlay, bg=BG_COLOR); fr.pack()
             for lab in row:
-                b = tk.Button(fr, text=lab, font=("Segoe UI", 26),
-                              width=KEY_BTN_W, height=KEY_BTN_H,
-                              command=lambda x=lab: self.on_key(x))
-                b.pack(side="left", padx=8, pady=8)
+                b = tk.Button(
+                    fr, text=lab, font=KEY_BTN_FONT,
+                    width=KEY_BTN_W, height=KEY_BTN_H,
+                    command=lambda x=lab: self.on_key(x)
+                )
+                b.pack(side="left", padx=KEY_PADX, pady=KEY_PADY)
 
-        # Ontgrendel – HOGER gemaakt (UNLOCK_BTN_H)
-        unlock = tk.Button(self.overlay, text="Ontgrendel", font=("Segoe UI", 28),
-                           width=UNLOCK_BTN_W, height=UNLOCK_BTN_H,
-                           command=self.try_unlock)
-        unlock.pack(pady=(16, 32))
+        # ONTGRENDEL – brede/hoge balk
+        unlock = tk.Button(
+            self.overlay, text=UNLOCK_TEXT, font=UNLOCK_FONT,
+            width=UNLOCK_BTN_W, height=UNLOCK_BTN_H,
+            bg=UNLOCK_BG, fg=UNLOCK_FG, activebackground=UNLOCK_ACTIVE_BG,
+            command=self.try_unlock
+        )
+        unlock.pack(pady=(20, 32))
 
-    # ---------- Logica ----------
+    # -------- Logica ----------
     def on_key(self, label):
         if label == "Wissen":
             self.entered = ""
@@ -174,18 +195,16 @@ class DisplayLockApp:
         self.overlay.deiconify()
         self.overlay.lift()
         self.overlay.attributes("-topmost", True)
-        # Lock-knop mag zichtbaar blijven; hoeft niet verborgen te worden
 
     def try_unlock(self):
         if self.entered == PIN:
             self.entered = ""
             self._update_mask()
             self.overlay.withdraw()
-            # Na unlock: zorg dat Lock-knop direct terugkomt (fallback naast keep-alive)
             self._show_lock_button()
         else:
             self.mask_var.set("Foutieve code")
-            self.overlay.after(800, lambda: self.mask_var.set(""))
+            self.overlay.after(900, lambda: self.mask_var.set(""))
             self.entered = ""
 
 def main():
