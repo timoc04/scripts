@@ -1,0 +1,3 @@
+# Eén code per regel. Optioneel: "PIN: Naam"
+1423: Algemeen
+3504: Timo
