@@ -1,5 +1,5 @@
-# overlay_lock.py  (v1.3 + keyboard support)
-# - "🔒 Lock nu" knop rechtsonder (keep-alive)
+# overlay_lock.py  (v1.3 + keyboard support + grotere lock-knop + meer marge)
+# - "🔒 Lock nu" knop rechtsonder (keep-alive), groter en verder van de randen
 # - Fullscreen overlay met compact numeriek keypad (touch)
 # - Toetsenbord: alfanumeriek typen, Backspace, Esc (wissen), Enter (ontgrendel)
 # - ONTGRENDEL-balk groot en duidelijk
@@ -34,8 +34,9 @@ UNLOCK_ACTIVE_BG = "#2E55B8"
 UNLOCK_BTN_W = 32
 UNLOCK_BTN_H = 4
 
-LOCKBTN_W, LOCKBTN_H = 120, 36
-LOCKBTN_MARGIN = 20
+# Lock-knop instellingen (groter + meer marge)
+LOCKBTN_W, LOCKBTN_H = 150, 45
+LOCKBTN_MARGIN = 40
 KEEP_ALIVE_MS = 1000
 
 # Toetsenbord: maximale codelengte (alfanumeriek)
@@ -157,15 +158,14 @@ class DisplayLockApp:
 
         self.lock_btn_win = tk.Toplevel(self.root)
         self.lock_btn_win.overrideredirect(True)
-               # altijd bovenaan
         self.lock_btn_win.attributes("-topmost", True)
         self.lock_btn_win.configure(bg="#F2F2F7")
         self.lock_btn_win.bind("<Unmap>", lambda e: self.lock_btn_win.after(50, self._show_lock_button))
         self.lock_btn_win.bind("<Map>",   lambda e: self._place_lock_button())
 
         btn = tk.Button(
-            self.lock_btn_win, text="🔒 Lock nu", font=("Segoe UI", 10),
-            width=14, height=1, command=self.lock_now,
+            self.lock_btn_win, text="🔒 Lock nu", font=("Segoe UI", 11, "bold"),
+            width=16, height=2, command=self.lock_now,
             relief="flat", bg="#F2F2F7", activebackground="#E6E6EC"
         )
         btn.pack()
