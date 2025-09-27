@@ -1,8 +1,9 @@
-# overlay_lock.py  (v1.3 – meerdere PINs uit extern bestand)
+# overlay_lock.py  (v1.3 + keyboard support)
 # - "🔒 Lock nu" knop rechtsonder (keep-alive)
-# - Fullscreen overlay met compact keypad
+# - Fullscreen overlay met compact numeriek keypad (touch)
+# - Toetsenbord: alfanumeriek typen, Backspace, Esc (wissen), Enter (ontgrendel)
 # - ONTGRENDEL-balk groot en duidelijk
-# - Leest meerdere PINs uit overlay_lock_pins.txt in dezelfde map
+# - Leest meerdere codes uit overlay_lock_pins.txt in dezelfde map
 #   Formaat:
 #     2580
 #     8246: Timo
@@ -36,6 +37,9 @@ UNLOCK_BTN_H = 4
 LOCKBTN_W, LOCKBTN_H = 120, 36
 LOCKBTN_MARGIN = 20
 KEEP_ALIVE_MS = 1000
+
+# Toetsenbord: maximale codelengte (alfanumeriek)
+MAX_CODE_LEN = 32
 
 # ===== PIN-bestand =====
 PINS_FILENAME = "overlay_lock_pins.txt"   # ligt in dezelfde map als dit script
@@ -72,7 +76,7 @@ def ensure_pins_file(path: Path):
 
 def load_pins(path: Path):
     """
-    Leest PINs uit bestand.
+    Leest codes uit bestand.
     - Lege regels en regels die met # beginnen worden genegeerd.
     - 'PIN: Naam' wordt ondersteund (naam niet verplicht).
     Retourneert (set_pins, dict_pin_to_name).
@@ -153,6 +157,7 @@ class DisplayLockApp:
 
         self.lock_btn_win = tk.Toplevel(self.root)
         self.lock_btn_win.overrideredirect(True)
+               # altijd bovenaan
         self.lock_btn_win.attributes("-topmost", True)
         self.lock_btn_win.configure(bg="#F2F2F7")
         self.lock_btn_win.bind("<Unmap>", lambda e: self.lock_btn_win.after(50, self._show_lock_button))
@@ -235,6 +240,12 @@ class DisplayLockApp:
         )
         unlock.pack(pady=(20, 32))
 
+        # --- Keyboard support ---
+        self.overlay.bind("<Key>", self.on_keypress)         # alfanumeriek toevoegen
+        self.overlay.bind("<BackSpace>", self.on_backspace)  # backspace
+        self.overlay.bind("<Escape>", self.on_clear)         # esc = wissen
+        self.overlay.bind("<Return>", lambda e: self.try_unlock())  # enter = ontgrendelen
+
     # -------- Logica ----------
     def on_key(self, label):
         if label == "Wissen":
@@ -242,10 +253,28 @@ class DisplayLockApp:
         elif label == "⌫":
             self.entered = self.entered[:-1]
         else:
-            if len(self.entered) < 8:
+            if len(self.entered) < MAX_CODE_LEN:
                 self.entered += label
             else:
                 self.overlay.bell()
+        self._update_mask()
+
+    def on_keypress(self, event):
+        ch = event.char
+        if ch and ch.isalnum():  # alleen letters/cijfers
+            if len(self.entered) < MAX_CODE_LEN:
+                self.entered += ch
+                self._update_mask()
+            else:
+                self.overlay.bell()
+
+    def on_backspace(self, event):
+        if self.entered:
+            self.entered = self.entered[:-1]
+            self._update_mask()
+
+    def on_clear(self, event):
+        self.entered = ""
         self._update_mask()
 
     def _update_mask(self):
@@ -257,13 +286,13 @@ class DisplayLockApp:
         self.overlay.deiconify()
         self.overlay.lift()
         self.overlay.attributes("-topmost", True)
+        self.overlay.focus_set()  # direct kunnen typen met toetsenbord
 
     def try_unlock(self):
-        # Herlaad PINs wanneer bestand is gewijzigd (hot-reload)
+        # Herlaad codes wanneer bestand is gewijzigd (hot-reload)
         self._reload_pins_if_changed()
 
         if self.entered in self.pins:
-            # (optioneel) hier kun je self.pin_names[self.entered] gebruiken
             self.entered = ""
             self._update_mask()
             self.overlay.withdraw()
