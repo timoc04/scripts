@@ -1,37 +1,27 @@
-# reset-hids.ps1 — reset alleen relevante HID-apparaten (geen muis/toetsenbord)
+# reset-all-hids.ps1 — reset ALLE HID devices (toetsenbord/muis inclusief)
 # Run as Administrator
 
 $ErrorActionPreference = 'SilentlyContinue'
 
-# Welke HID-namen WEL resetten (NL + brede match)
-$include = @(
-  'HID-compatibel touchscreen',
-  'HID-compatibel, door leverancier gedefinieerd apparaat',
-  'USB-invoerapparaat'
-)
+# Eventjes wachten tot USB/HID klaar is na boot
+Start-Sleep -Seconds 10
 
-# Welke HID-namen NIET resetten (input blijft bruikbaar)
-$exclude = @(
-  'HID-toetsenbordapparaat',   # NL keyboard
-  'HID Keyboard',              # EN keyboard
-  'HID-compliant mouse',       # EN mouse
-  'HID-compatibele muis'       # NL mouse
-)
+# Lijst alle HID devices
+$hids = Get-PnpDevice -Class HIDClass | Where-Object { $_.InstanceId -ne $null }
 
-# Kandidaten ophalen binnen HIDClass
-$targets = Get-PnpDevice -Class HIDClass |
-  Where-Object {
-    $_.Status -ne 'Error' -and
-    $_.FriendlyName -ne $null -and
-    ($include | ForEach-Object { $_ -eq $PSItem.FriendlyName -or $PSItem.FriendlyName -match $_ }) -contains $true -and
-    -not (($exclude | ForEach-Object { $PSItem.FriendlyName -match $_ }) -contains $true)
-  }
+if (-not $hids) { Write-Host "Geen HID devices gevonden."; exit 0 }
 
-# Reset
-foreach ($d in $targets) {
+Write-Host "Reset $($hids.Count) HID devices..."
+
+foreach ($d in $hids) {
   try {
-    Disable-PnpDevice -InstanceId $d.InstanceId -Confirm:$false
+    Disable-PnpDevice -InstanceId $d.InstanceId -Confirm:$false | Out-Null
     Start-Sleep -Milliseconds 700
-    Enable-PnpDevice  -InstanceId $d.InstanceId -Confirm:$false
-  } catch {}
+    Enable-PnpDevice  -InstanceId $d.InstanceId -Confirm:$false | Out-Null
+  } catch {
+    # probeer in elk geval te heractiveren
+    try { Enable-PnpDevice -InstanceId $d.InstanceId -Confirm:$false | Out-Null } catch {}
+  }
 }
+
+Write-Host "Klaar."
