@@ -1,57 +1,37 @@
-# reset-hid-nfc.ps1  —  herinitialiseert HID/USB devices en Smart Card service
+# reset-hids.ps1 — reset alleen relevante HID-apparaten (geen muis/toetsenbord)
 # Run as Administrator
 
 $ErrorActionPreference = 'SilentlyContinue'
 
-# 0) Eventuele kleine wachttijd zodat USB init klaar is
-Start-Sleep -Seconds 10
-
-# 1) Smart Card service zacht herstarten
-sc.exe stop SCardSvr | Out-Null
-sc.exe start SCardSvr | Out-Null
-
-# 2) Eerst USB hubs kort resetten (hier hangen de HID devices vaak onder)
-$usbHubPatterns = @(
-  '^USB\\ROOT_HUB',                 # Root hubs
-  '^USB\\VID_',                     # Concreet USB devices
-  'USB-hoofdhub',                   # NL naam
-  'Samengesteld USB-apparaat'       # Composite device
-)
-
-$usbTargets = Get-PnpDevice | Where-Object {
-  ($_.InstanceId -match $usbHubPatterns[0]) -or
-  ($_.InstanceId -match $usbHubPatterns[1]) -or
-  ($_.FriendlyName -match $usbHubPatterns[2]) -or
-  ($_.FriendlyName -match $usbHubPatterns[3])
-}
-
-foreach ($d in $usbTargets) {
-  try {
-    Disable-PnpDevice -InstanceId $d.InstanceId -Confirm:$false
-    Start-Sleep -Milliseconds 700
-    Enable-PnpDevice  -InstanceId $d.InstanceId -Confirm:$false
-  } catch {}
-}
-
-# 3) Dan specifiek de HID-devices die jij in Apparaatbeheer ziet
-$hidNamesExact = @(
+# Welke HID-namen WEL resetten (NL + brede match)
+$include = @(
   'HID-compatibel touchscreen',
   'HID-compatibel, door leverancier gedefinieerd apparaat',
   'USB-invoerapparaat'
 )
 
-# Pak alle HID-class devices en filter op bovenstaande NL-namen
-$hidTargets = Get-PnpDevice -Class HIDClass | Where-Object {
-  $hidNamesExact -contains $_.FriendlyName -or $_.FriendlyName -match 'HID-compatibel|USB-invoer'
-}
+# Welke HID-namen NIET resetten (input blijft bruikbaar)
+$exclude = @(
+  'HID-toetsenbordapparaat',   # NL keyboard
+  'HID Keyboard',              # EN keyboard
+  'HID-compliant mouse',       # EN mouse
+  'HID-compatibele muis'       # NL mouse
+)
 
-foreach ($d in $hidTargets) {
+# Kandidaten ophalen binnen HIDClass
+$targets = Get-PnpDevice -Class HIDClass |
+  Where-Object {
+    $_.Status -ne 'Error' -and
+    $_.FriendlyName -ne $null -and
+    ($include | ForEach-Object { $_ -eq $PSItem.FriendlyName -or $PSItem.FriendlyName -match $_ }) -contains $true -and
+    -not (($exclude | ForEach-Object { $PSItem.FriendlyName -match $_ }) -contains $true)
+  }
+
+# Reset
+foreach ($d in $targets) {
   try {
     Disable-PnpDevice -InstanceId $d.InstanceId -Confirm:$false
     Start-Sleep -Milliseconds 700
     Enable-PnpDevice  -InstanceId $d.InstanceId -Confirm:$false
   } catch {}
 }
-
-# 4) Kleine pauze en klaar
-Start-Sleep -Seconds 2
