@@ -1,7 +1,8 @@
-# sacoa_overlay_lock.py  (v1.2 – fixed: geen alpha in bg-kleuren)
-# - Fullscreen blur overlay met meertalige tekst
-# - Geen keypad/tekstveld
-# - Seriële trigger (ESP32/adapter) verbergt overlay; auto-relock na X sec
+# sacoa_overlay_lock.py  (v1.3 – Service-knop + Numpad (code 1423) + serial trigger + blur)
+# - Rechtsonder: "Service" knop (altijd zichtbaar)
+# - Numpad verschijnt bij Service; code 1423 ontgrendelt overlay
+# - Blur overlay met meertalige tekst
+# - Luistert op seriële poort (ESP32) voor trigger; auto-relock na X seconden
 
 import tkinter as tk
 from tkinter import messagebox
@@ -11,11 +12,14 @@ import threading
 import time
 
 # ====== CONFIG ======
-SCREEN_INDEX = 0                 # 0=primair, 1=tweede, 2=derde monitor
+SCREEN_INDEX = 0                 # 0=primair, 1=tweede, ...
 AUTO_RELOCK_SECONDS = 90         # 0 = nooit automatisch relocken
 COM_PORT = "COM5"                # pas aan naar jouw COM-poort
 BAUDRATE = 9600
 TRIGGER_MIN_INTERVAL = 1.0       # anti-spam (sec)
+
+# Service PIN (numpad)
+SERVICE_PIN = "1423"
 
 # Uiterlijk/blur
 BLUR_RADIUS = 12
@@ -23,6 +27,10 @@ DIM_ALPHA = 0.35                 # extra verdonkeren 0..1
 BG_FALLBACK = "#111122"          # effen fallback-kleur
 TITLE_FONT = ("Segoe UI", 40, "bold")
 SUB_FONT   = ("Segoe UI", 22)
+
+# Service-knop grootte/marge
+SERVICE_W, SERVICE_H = 150, 45
+SERVICE_MARGIN = 40
 
 # ====== DEPENDENCIES ======
 # pip install pillow pyserial
@@ -65,7 +73,8 @@ class SacoaOverlayApp:
             messagebox.showerror("Overlay", "Geen schermen gevonden.")
             raise SystemExit(1)
 
-        self.sx, self.sy, self.sr, self.sb = screens[min(max(0, SCREEN_INDEX), len(screens)-1)]
+        idx = min(max(0, SCREEN_INDEX), len(screens)-1)
+        self.sx, self.sy, self.sr, self.sb = screens[idx]
         self.swidth  = self.sr - self.sx
         self.sheight = self.sb - self.sy
 
@@ -74,14 +83,20 @@ class SacoaOverlayApp:
         self.last_trigger = 0.0
         self.relock_timer = None
 
+        # service button window & keypad
+        self.service_win = None
+        self.keypad_win = None
+        self.entered = ""
+
         self._build_overlay()
+        self._build_service_button()
         self.show_overlay()
 
         if HAS_SERIAL:
             t = threading.Thread(target=self._serial_loop, daemon=True)
             t.start()
 
-    # ---- UI ----
+    # ---- UI overlay ----
     def _build_overlay(self):
         self.overlay = tk.Toplevel(self.root)
         self.overlay.withdraw()
@@ -89,11 +104,9 @@ class SacoaOverlayApp:
         self.overlay.attributes("-topmost", True)
         self.overlay.geometry(f"{self.swidth}x{self.sheight}+{self.sx}+{self.sy}")
 
-        # Achtergrondbeeld (blur) of effen kleur
         self.bg_label = tk.Label(self.overlay, bg=BG_FALLBACK)
         self.bg_label.pack(fill="both", expand=True)
 
-        # Tekstcontainer (géén alpha: gebruik effen bg)
         self.text_frame = tk.Frame(self.bg_label, bg=BG_FALLBACK, highlightthickness=0)
         self.text_frame.place(relx=0.5, rely=0.5, anchor="center")
 
@@ -116,13 +129,13 @@ class SacoaOverlayApp:
             return
         try:
             img = ImageGrab.grab(bbox=(self.sx, self.sy, self.sr, self.sb))
-            img = img.filter(ImageFilter.GaussianBlur(blur := BLUR_RADIUS))
+            img = img.filter(ImageFilter.GaussianBlur(BLUR_RADIUS))
             if DIM_ALPHA > 0:
                 black = Image.new("RGB", img.size, (0, 0, 0))
                 img = Image.blend(img, black, DIM_ALPHA)
             tkimg = ImageTk.PhotoImage(img)
             self.img_ref = tkimg
-            self.bg_label.configure(image=self.img_ref, bg="black")  # geen alpha gebruiken
+            self.bg_label.configure(image=self.img_ref, bg="black")
         except Exception:
             self.bg_label.configure(bg=BG_FALLBACK, image="")
             self.img_ref = None
@@ -132,67 +145,28 @@ class SacoaOverlayApp:
         self.overlay.deiconify()
         self.overlay.lift()
         self.overlay.attributes("-topmost", True)
+        # zorg dat service-knop bovenop blijft
+        self._show_service_button()
 
     def hide_overlay(self):
         self.overlay.withdraw()
 
-    # ---- Trigger vanuit serieel ----
-    def on_serial_trigger(self):
-        now = time.time()
-        if now - self.last_trigger < TRIGGER_MIN_INTERVAL:
+    # ---- Service knop (rechtsonder) ----
+    def _build_service_button(self):
+        if self.service_win and self.service_win.winfo_exists():
             return
-        self.last_trigger = now
 
-        self.hide_overlay()
+        self.service_win = tk.Toplevel(self.root)
+        self.service_win.overrideredirect(True)
+        self.service_win.attributes("-topmost", True)
+        self.service_win.configure(bg="#F2F2F7")
 
-        if self.relock_timer:
-            try:
-                self.relock_timer.cancel()
-            except Exception:
-                pass
-            self.relock_timer = None
+        btn = tk.Button(
+            self.service_win, text="Service", font=("Segoe UI", 11, "bold"),
+            width=12, height=2, command=self._on_service_pressed,
+            relief="raised", bg="#F2F2F7", activebackground="#E6E6EC"
+        )
+        btn.pack()
+        self._place_service_button()
 
-        if AUTO_RELOCK_SECONDS > 0:
-            self.relock_timer = threading.Timer(AUTO_RELOCK_SECONDS, lambda: self.root.after(0, self.show_overlay))
-            self.relock_timer.daemon = True
-            self.relock_timer.start()
-
-    # ---- Seriële lees-loop ----
-    def _serial_loop(self):
-        import serial  # safe import hier
-        ser = None
-        while True:
-            try:
-                if ser is None or not ser.is_open:
-                    try:
-                        ser = serial.Serial(COM_PORT, BAUDRATE, timeout=0.2)
-                    except Exception:
-                        time.sleep(1.0)
-                        continue
-
-                data = ser.readline()
-                if data and data.strip():
-                    self.root.after(0, self.on_serial_trigger)
-                    time.sleep(0.1)
-                else:
-                    b = ser.read(1)
-                    if b:
-                        self.root.after(0, self.on_serial_trigger)
-                        time.sleep(0.1)
-
-            except Exception:
-                try:
-                    if ser:
-                        ser.close()
-                except Exception:
-                    pass
-                ser = None
-                time.sleep(1.0)
-
-def main():
-    root = tk.Tk()
-    app = SacoaOverlayApp(root)
-    root.mainloop()
-
-if __name__ == "__main__":
-    main()
+        # als het venster gemi
