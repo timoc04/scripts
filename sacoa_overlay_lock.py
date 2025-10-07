@@ -1,8 +1,8 @@
-# sacoa_overlay_lock.py  (v1.3.7 – keypad breder, platter, perfect passend)
-# Blur overlay met NL/EN/DE tekst
-# Seriële trigger (ESP32)
-# Service-knop rechtsonder
-# Numpad met toetsenbord en optimale layout
+# sacoa_overlay_lock.py (v1.3.8 – egaal geblurd, geen donker vlak achter tekst)
+# Overlay met blur en meertalige tekst
+# Seriële trigger via ESP32
+# Service-knop met toetsenbord/numpad
+# Volledig fullscreen blur zonder kleurvlakken
 
 import tkinter as tk
 from tkinter import messagebox
@@ -21,13 +21,12 @@ SERVICE_PIN = "1423"
 # UI
 BLUR_RADIUS = 12
 DIM_ALPHA = 0.35
-BG_FALLBACK = "#111122"
 TITLE_FONT = ("Segoe UI", 40, "bold")
 SUB_FONT   = ("Segoe UI", 22)
 SERVICE_W, SERVICE_H = 150, 45
 SERVICE_MARGIN = 40
 
-# ====== Deps ======
+# ====== DEPS ======
 try:
     from PIL import ImageGrab, ImageFilter, Image, ImageTk
     HAS_PIL = True
@@ -39,7 +38,7 @@ try:
 except Exception:
     HAS_SERIAL = False
 
-# ====== Monitor helpers ======
+# ====== MONITOR HELPERS ======
 user32 = ctypes.windll.user32
 user32.SetProcessDPIAware()
 MONITORENUMPROC = ctypes.WINFUNCTYPE(
@@ -85,7 +84,7 @@ class SacoaOverlayApp:
         if HAS_SERIAL:
             threading.Thread(target=self._serial_loop, daemon=True).start()
 
-    # ---------- overlay ----------
+    # ---------- OVERLAY ----------
     def _build_overlay(self):
         self.overlay = tk.Toplevel(self.root)
         self.overlay.withdraw()
@@ -93,20 +92,22 @@ class SacoaOverlayApp:
         self.overlay.attributes("-topmost", True)
         self.overlay.geometry(f"{self.swidth}x{self.sheight}+{self.sx}+{self.sy}")
 
-        self.bg_label = tk.Label(self.overlay, bg=BG_FALLBACK)
+        # achtergrond met blur
+        self.bg_label = tk.Label(self.overlay)
         self.bg_label.pack(fill="both", expand=True)
 
-        text_frame = tk.Frame(self.overlay, bg=BG_FALLBACK)
+        # tekst direct op blur (geen achtergrondvlak)
+        text_frame = tk.Frame(self.overlay, bg="", highlightthickness=0)
         text_frame.place(relx=0.5, rely=0.5, anchor="center")
 
         tk.Label(text_frame, text="Scan uw pasje om te activeren",
-                 font=TITLE_FONT, fg="white", bg=BG_FALLBACK).pack(pady=(0, 10))
+                 font=TITLE_FONT, fg="white", bg="").pack(pady=(0, 10))
         tk.Label(text_frame, text="Scan your card to activate",
-                 font=SUB_FONT, fg="#DDDDFF", bg=BG_FALLBACK).pack()
+                 font=SUB_FONT, fg="#DDDDFF", bg="").pack()
         tk.Label(text_frame, text="Bitte Karte scannen zum Aktivieren",
-                 font=SUB_FONT, fg="#DDDDFF", bg=BG_FALLBACK).pack()
+                 font=SUB_FONT, fg="#DDDDFF", bg="").pack()
 
-        # Service-knop
+        # Service-knop rechtsonder
         self.service_btn = tk.Button(
             self.overlay, text="Service", font=("Segoe UI", 11, "bold"),
             bg="#F2F2F7", activebackground="#E6E6EC", relief="raised",
@@ -119,7 +120,7 @@ class SacoaOverlayApp:
 
     def _render_blur(self):
         if not HAS_PIL:
-            self.bg_label.configure(bg=BG_FALLBACK, image="")
+            self.bg_label.configure(bg="black", image="")
             self.img_ref = None
             return
         try:
@@ -129,9 +130,9 @@ class SacoaOverlayApp:
                 black = Image.new("RGB", img.size, (0, 0, 0))
                 img = Image.blend(img, black, DIM_ALPHA)
             self.img_ref = ImageTk.PhotoImage(img)
-            self.bg_label.configure(image=self.img_ref, bg="black")
+            self.bg_label.configure(image=self.img_ref)
         except Exception:
-            self.bg_label.configure(bg=BG_FALLBACK, image="")
+            self.bg_label.configure(bg="black", image="")
             self.img_ref = None
 
     def show_overlay(self):
@@ -143,7 +144,7 @@ class SacoaOverlayApp:
     def hide_overlay(self):
         self.overlay.withdraw()
 
-    # ---------- service / keypad ----------
+    # ---------- SERVICE / KEYPAD ----------
     def _on_service_pressed(self):
         self._show_keypad()
 
@@ -154,7 +155,6 @@ class SacoaOverlayApp:
             self.keypad_win.focus_set()
             return
 
-        # venster iets breder, minder hoog
         self.keypad_win = tk.Toplevel(self.root)
         self.keypad_win.attributes("-topmost", True)
         self.keypad_win.title("Service")
@@ -162,7 +162,7 @@ class SacoaOverlayApp:
         kx = self.sx + (self.swidth - kw) // 2
         ky = self.sy + (self.sheight - kh) // 2
         self.keypad_win.geometry(f"{kw}x{kh}+{kx}+{ky}")
-        self.keypad_win.configure(bg=BG_FALLBACK)
+        self.keypad_win.configure(bg="#111122")
         self.keypad_win.resizable(False, False)
 
         self.mask_var = tk.StringVar(value="")
@@ -170,12 +170,11 @@ class SacoaOverlayApp:
                  font=("Segoe UI", 22), bg="#22223A", fg="white",
                  width=22, height=1).pack(pady=(10, 6))
 
-        # grid-layout
-        grid = tk.Frame(self.keypad_win, bg=BG_FALLBACK)
+        grid = tk.Frame(self.keypad_win, bg="#111122")
         grid.pack(pady=6)
 
         btn_font = ("Segoe UI", 18)
-        btn_w, btn_h = 6, 1   # breder, platter
+        btn_w, btn_h = 6, 1
         pad = dict(padx=6, pady=6)
 
         labels = [
@@ -190,13 +189,11 @@ class SacoaOverlayApp:
                           command=lambda x=lab: self._keypad_press(x))\
                     .grid(row=r, column=c, **pad)
 
-        # ONTGRENDEL goed passend
         tk.Button(self.keypad_win, text="ONTGRENDEL",
                   font=("Segoe UI", 18, "bold"), bg="#3A6FF2", fg="white",
                   command=self._keypad_try_unlock)\
             .pack(fill="x", padx=16, pady=(8, 10))
 
-        # Keyboard support
         self.keypad_win.bind("<Key>", self._kb_type)
         self.keypad_win.bind("<BackSpace>", self._kb_backspace)
         self.keypad_win.bind("<Escape>", self._kb_clear)
@@ -245,7 +242,7 @@ class SacoaOverlayApp:
             self.keypad_win.after(900, lambda: self.mask_var.set(""))
             self.entered = ""
 
-    # ---------- serial ----------
+    # ---------- SERIAL ----------
     def on_serial_trigger(self):
         now = time.time()
         if now - self.last_trigger < TRIGGER_MIN_INTERVAL:
