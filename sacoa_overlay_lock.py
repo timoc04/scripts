@@ -1,7 +1,7 @@
-# sacoa_overlay_lock.py  (v1.3.2 – Service-knop ín de overlay + numpad 1423)
+# sacoa_overlay_lock.py  (v1.3.3 – compact numpad dat in het venster past)
 # - Blur overlay met NL/EN/DE tekst
-# - Seriële trigger (ESP32) ontgrendelt; auto-relock na X sec
-# - Service-knop rechtsonder in de overlay; toont numpad; PIN 1423 ontgrendelt
+# - Seriële trigger (ESP32) ontgrendelt; auto-relock
+# - Service-knop rechtsonder in de overlay; compact numpad; PIN 1423 ontgrendelt
 
 import tkinter as tk
 from tkinter import messagebox
@@ -97,11 +97,9 @@ class SacoaOverlayApp:
         self.overlay.attributes("-topmost", True)
         self.overlay.geometry(f"{self.swidth}x{self.sheight}+{self.sx}+{self.sy}")
 
-        # achtergrond voor blur
         self.bg_label = tk.Label(self.overlay, bg=BG_FALLBACK)
         self.bg_label.pack(fill="both", expand=True)
 
-        # tekst in het midden
         text_frame = tk.Frame(self.overlay, bg=BG_FALLBACK, highlightthickness=0)
         text_frame.place(relx=0.5, rely=0.5, anchor="center")
 
@@ -112,13 +110,12 @@ class SacoaOverlayApp:
         tk.Label(text_frame, text="Bitte Karte scannen zum Aktivieren",
                  font=SUB_FONT, fg="#DDDDFF", bg=BG_FALLBACK).pack()
 
-        # SERVICE-knop RECHTSONDER (in overlay zelf, dus altijd zichtbaar binnen de overlay)
+        # Service-knop rechtsonder in de overlay
         self.service_btn = tk.Button(
             self.overlay, text="Service", font=("Segoe UI", 11, "bold"),
             bg="#F2F2F7", activebackground="#E6E6EC", relief="raised",
             command=self._on_service_pressed
         )
-        # vaste afmeting + positionering t.o.v. rechter/onderrand
         self.service_btn.place(
             x=self.swidth - SERVICE_MARGIN, y=self.sheight - SERVICE_MARGIN,
             anchor="se", width=SERVICE_W, height=SERVICE_H
@@ -155,6 +152,7 @@ class SacoaOverlayApp:
         self._show_keypad()
 
     def _show_keypad(self):
+        # Compact venster (ongewijzigd formaat), maar kleinere knoppen
         if self.keypad_win and self.keypad_win.winfo_exists():
             self.keypad_win.deiconify()
             self.keypad_win.lift()
@@ -164,33 +162,36 @@ class SacoaOverlayApp:
         self.keypad_win = tk.Toplevel(self.root)
         self.keypad_win.attributes("-topmost", True)
         self.keypad_win.title("Service")
-        kw, kh = 380, 520
+        kw, kh = 360, 440   # vensterformaat (klein)
         kx = self.sx + (self.swidth - kw) // 2
         ky = self.sy + (self.sheight - kh) // 2
         self.keypad_win.geometry(f"{kw}x{kh}+{kx}+{ky}")
         self.keypad_win.configure(bg=BG_FALLBACK)
+        self.keypad_win.resizable(False, False)
 
         self.mask_var = tk.StringVar(value="")
         tk.Label(self.keypad_win, textvariable=self.mask_var,
-                 font=("Segoe UI", 28), bg="#22223A", fg="white",
-                 width=20, height=2).pack(pady=(12, 8))
+                 font=("Segoe UI", 22), bg="#22223A", fg="white",
+                 width=16, height=1).pack(pady=(12, 8))
 
-        frame_keys = tk.Frame(self.keypad_win, bg=BG_FALLBACK); frame_keys.pack(pady=8)
-        btn_cfg = {"font":("Segoe UI", 20), "width":6, "height":3}
+        frame_keys = tk.Frame(self.keypad_win, bg=BG_FALLBACK); frame_keys.pack(pady=4)
+
+        # Compacte knoppen
+        btn_cfg = {"font":("Segoe UI", 16), "width":4, "height":2}
         labels = [["1","2","3"], ["4","5","6"], ["7","8","9"], ["Wissen","0","⌫"]]
         for row in labels:
-            r = tk.Frame(frame_keys, bg=BG_FALLBACK); r.pack()
+            r = tk.Frame(frame_keys, bg=BG_FALLBACK); r.pack(pady=2)
             for lab in row:
                 tk.Button(r, text=lab, command=lambda x=lab: self._keypad_press(x), **btn_cfg)\
-                    .pack(side="left", padx=6, pady=6)
+                    .pack(side="left", padx=4, pady=0)
 
         tk.Button(self.keypad_win, text="ONTGRENDEL",
-                  font=("Segoe UI", 18, "bold"),
+                  font=("Segoe UI", 16, "bold"),
                   bg="#3A6FF2", fg="white",
-                  command=self._keypad_try_unlock, width=30, height=2).pack(pady=(12,14))
+                  command=self._keypad_try_unlock, width=22, height=1).pack(pady=(10,10))
 
         tk.Button(self.keypad_win, text="Sluiten", command=self._close_keypad)\
-            .place(x=kw-80, y=12)
+            .place(x=kw-72, y=8, width=64, height=26)
 
         self.keypad_win.focus_set()
 
@@ -236,7 +237,9 @@ class SacoaOverlayApp:
             except Exception: pass
         self.relock_timer = None
         if AUTO_RELOCK_SECONDS > 0:
-            self.relock_timer = threading.Timer(AUTO_RELOCK_SECONDS, lambda: self.root.after(0, self.show_overlay))
+            self.relock_timer = threading.Timer(
+                AUTO_RELOCK_SECONDS, lambda: self.root.after(0, self.show_overlay)
+            )
             self.relock_timer.daemon = True
             self.relock_timer.start()
 
