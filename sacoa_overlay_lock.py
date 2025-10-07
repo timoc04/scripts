@@ -1,4 +1,4 @@
-"""
+r"""
 sacoa_overlay_lock.py
 
 Benodigd op een nieuwe PC:
@@ -7,8 +7,8 @@ Benodigd op een nieuwe PC:
    pip install pillow pyserial
 
 Starttips:
-- Start met 'pythonw sacoa_overlay_lock.py' om geen consolevenster te tonen.
-- In Taakplanner: Programma/script = pythonw.exe, Argumenten = <pad>\sacoa_overlay_lock.py
+- Start met:  pythonw sacoa_overlay_lock.py   (geen consolevenster)
+- Taakplanner: Programma/script = pythonw.exe, Argumenten = <pad>\sacoa_overlay_lock.py
 """
 
 import tkinter as tk
@@ -18,12 +18,13 @@ from ctypes import wintypes
 import threading, time
 
 # ========= INSTELLINGEN =========
-SCREEN_INDEX = 0                 # 0 = primair, 1 = tweede, etc.
-AUTO_RELOCK_SECONDS = 240        # na ontgrendelen automatisch weer locken
-COM_PORT = "COM5"                # seriële poort van ESP32/adapter
+SCREEN_INDEX = 0                  # 0 = primair, 1 = tweede, etc.
+START_LOCK_DELAY_SECONDS = 45     # overlay pas na X seconden tonen
+AUTO_RELOCK_SECONDS = 240         # na ontgrendelen automatisch weer locken
+COM_PORT = "COM5"                 # seriële poort van ESP32/adapter
 BAUDRATE = 9600
-TRIGGER_MIN_INTERVAL = 1.0       # debounce tegen meerdere pulsen
-SERVICE_PIN = "1423"             # code via Service-venster
+TRIGGER_MIN_INTERVAL = 1.0        # debounce tegen meerdere pulsen
+SERVICE_PIN = "1423"              # code via Service-venster
 
 # UI
 BLUR_RADIUS = 12
@@ -88,7 +89,11 @@ class SacoaOverlayApp:
         self.mask_var = None
 
         self._build_overlay()
-        self.show_overlay()
+
+        # Overlay pas na START_LOCK_DELAY_SECONDS tonen
+        threading.Timer(
+            START_LOCK_DELAY_SECONDS, lambda: self.root.after(0, self.show_overlay)
+        ).start()
 
         if HAS_SERIAL:
             threading.Thread(target=self._serial_loop, daemon=True).start()
@@ -250,7 +255,7 @@ class SacoaOverlayApp:
             self.mask_var.set("")
             self.hide_overlay()
             self._on_keypad_close()
-            self._start_relock_timer()   # relock altijd starten
+            self._start_relock_timer()   # altijd relock starten
         else:
             self.mask_var.set("Foutieve code")
             self.keypad_win.after(900, lambda: self.mask_var.set(""))
@@ -263,7 +268,7 @@ class SacoaOverlayApp:
             return
         self.last_trigger = now
         self.hide_overlay()
-        self._start_relock_timer()         # relock altijd starten
+        self._start_relock_timer()         # altijd relock starten
 
     def _serial_loop(self):
         if not HAS_SERIAL:
