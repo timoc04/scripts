@@ -2,7 +2,8 @@ r"""
 sacoa_overlay_lock.py
 
 Benodigd op een nieuwe PC:
-1) Installeer Python 3.10 of hoger
+1) Open CMD en voer uit:
+   winget install Python.Python.3.12
 2) Open CMD en voer uit:
    pip install pillow pyserial
 
