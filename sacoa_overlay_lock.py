@@ -8,7 +8,7 @@ Benodigd op een nieuwe PC:
 
 Starttips:
 - Start met:  pythonw sacoa_overlay_lock.py   (geen consolevenster)
-- Taakplanner: Programma/script = pythonw.exe, Argumenten = <pad>\sacoa_overlay_lock.py
+- Taakplanner: Programma/script = pythonw.exe, Argumenten = <pad>\sacoa_overlay_lock.py, Beginnen in = C:<pad>
 """
 
 import tkinter as tk
@@ -19,7 +19,7 @@ import threading, time
 
 # ========= INSTELLINGEN =========
 SCREEN_INDEX = 0                  # 0 = primair, 1 = tweede, etc.
-START_LOCK_DELAY_SECONDS = 45     # overlay pas na X seconden tonen
+START_LOCK_DELAY_SECONDS = 60     # overlay pas na X seconden tonen
 AUTO_RELOCK_SECONDS = 240         # na ontgrendelen automatisch weer locken
 COM_PORT = "COM5"                 # seriële poort van ESP32/adapter
 BAUDRATE = 9600
