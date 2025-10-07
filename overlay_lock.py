@@ -1,13 +1,4 @@
-# overlay_lock.py  (v1.3 + keyboard support + grotere lock-knop + meer marge)
-# - "🔒 Lock nu" knop rechtsonder (keep-alive), groter en verder van de randen
-# - Fullscreen overlay met compact numeriek keypad (touch)
-# - Toetsenbord: alfanumeriek typen, Backspace, Esc (wissen), Enter (ontgrendel)
-# - ONTGRENDEL-balk groot en duidelijk
-# - Leest meerdere codes uit overlay_lock_pins.txt in dezelfde map
-#   Formaat:
-#     2580
-#     8246: Timo
-#     # comment of lege regels mag
+# overlay_lock.py  (v1.3)
 
 import tkinter as tk
 from tkinter import messagebox
@@ -34,7 +25,7 @@ UNLOCK_ACTIVE_BG = "#2E55B8"
 UNLOCK_BTN_W = 32
 UNLOCK_BTN_H = 4
 
-# Lock-knop instellingen (groter + meer marge)
+# Lock-knop instellingen
 LOCKBTN_W, LOCKBTN_H = 150, 45
 LOCKBTN_MARGIN = 40
 KEEP_ALIVE_MS = 1000
@@ -70,8 +61,8 @@ def ensure_pins_file(path: Path):
     sample = (
         "# overlay_lock_pins.txt — één code per regel\n"
         "# Optioneel: PIN: Naam\n"
-        "2580: Medewerker\n"
-        "8246\n"
+        "1423: Medewerkers\n"
+        "2580\n"
     )
     path.write_text(sample, encoding="utf-8")
 
