@@ -1,8 +1,7 @@
-# overlay_lock.py  (Sacoa serial trigger + blur overlay)
+# sacoa_overlay_lock.py  (v1.1 – fixed colors, Sacoa serial trigger + blur overlay)
 # - Fullscreen blur overlay met meertalige boodschap
-# - Geen keypad/tekstveld meer
+# - Geen keypad/tekstveld
 # - Luistert op seriële poort; bij trigger -> overlay weg; auto-relock na X seconden
-# - Ontworpen voor starten via pythonw.exe (geen console)
 
 import tkinter as tk
 import ctypes
@@ -14,21 +13,20 @@ from pathlib import Path
 
 # === CONFIG ===
 SCREEN_INDEX = 0                 # 0=primair, 1=tweede, 2=derde monitor
-AUTO_RELOCK_SECONDS = 90         # na hoeveel seconden de overlay automatisch terugkomt (0 = geen auto-relock)
-COM_PORT = "COM5"                # pas dit aan naar jouw seriële poort (bv. COM3/COM5)
-BAUDRATE = 9600                  # baudrate van je seriële omzetter/microcontroller
-TRIGGER_MIN_INTERVAL = 1.0       # debounce: min. seconden tussen triggers
+AUTO_RELOCK_SECONDS = 90         # na hoeveel seconden de overlay automatisch terugkomt (0 = nooit)
+COM_PORT = "COM5"                # pas aan naar je seriële poort
+BAUDRATE = 9600                  # baudrate van je ESP32
+TRIGGER_MIN_INTERVAL = 1.0       # minimale tijd tussen triggers (anti-spam)
 
 # Blur & uiterlijk
-BLUR_RADIUS = 12                 # hoe sterk het blur-effect is
-DIM_ALPHA = 0.35                 # extra verdonkeren (0..1), 0=geen dim, 0.35 = prettig donker
-BG_FALLBACK = "#111122"          # fallback achtergrond als blur niet lukt
+BLUR_RADIUS = 12
+DIM_ALPHA = 0.35
+BG_FALLBACK = "#111122"
 TITLE_FONT = ("Segoe UI", 40, "bold")
 SUB_FONT   = ("Segoe UI", 22)
 
-# === DEPENDENCIES (Pillow voor blur, pyserial voor COM) ===
-# - pip install pillow
-# - pip install pyserial
+# === DEPENDENCIES ===
+# pip install pillow pyserial
 try:
     from PIL import ImageGrab, ImageFilter, Image, ImageTk
     has_pillow = True
@@ -69,20 +67,20 @@ class SacoaOverlayApp:
         if not screens:
             tk.messagebox.showerror("Overlay", "Geen schermen gevonden.")
             sys.exit(1)
+
         self.screen_idx = SCREEN_INDEX if 0 <= SCREEN_INDEX < len(screens) else 0
         self.sx, self.sy, self.sr, self.sb = screens[self.screen_idx]
         self.swidth  = self.sr - self.sx
         self.sheight = self.sb - self.sy
 
         self.overlay = None
-        self.img_ref = None  # referentie naar Tk image
+        self.img_ref = None
         self.last_trigger = 0.0
         self.relock_timer = None
 
         self._build_overlay()
         self.show_overlay()
 
-        # start seriële luister-thread (als pyserial aanwezig is)
         if has_serial:
             t = threading.Thread(target=self._serial_loop, daemon=True)
             t.start()
@@ -99,50 +97,46 @@ class SacoaOverlayApp:
         self.bg_label = tk.Label(self.overlay, bg=BG_FALLBACK)
         self.bg_label.pack(fill="both", expand=True)
 
-        # container voor tekst
-        self.text_frame = tk.Frame(self.bg_label, bg="", highlightthickness=0)
+        # tekst container
+        self.text_frame = tk.Frame(self.bg_label, bg=BG_FALLBACK, highlightthickness=0)
         self.text_frame.place(relx=0.5, rely=0.5, anchor="center")
 
         title = tk.Label(self.text_frame,
                          text="Scan uw pasje om te activeren",
-                         font=TITLE_FONT, fg="white", bg="#00000000")
-        title.pack(pady=(0,10))
+                         font=TITLE_FONT, fg="white", bg=BG_FALLBACK)
+        title.pack(pady=(0, 10))
+
         sub_en = tk.Label(self.text_frame,
                           text="Scan your card to activate",
-                          font=SUB_FONT, fg="#DDDDFF", bg="#00000000")
+                          font=SUB_FONT, fg="#DDDDFF", bg=BG_FALLBACK)
         sub_en.pack()
+
         sub_de = tk.Label(self.text_frame,
                           text="Bitte Karte scannen zum Aktivieren",
-                          font=SUB_FONT, fg="#DDDDFF", bg="#00000000")
+                          font=SUB_FONT, fg="#DDDDFF", bg=BG_FALLBACK)
         sub_de.pack()
 
-    # ---- blur screenshot genereren en tonen ----
+    # ---- blur achtergrond ----
     def _render_blur(self):
         if not has_pillow:
-            # Geen PIL: fallback naar effen achtergrondkleur
             self.bg_label.configure(bg=BG_FALLBACK, image="")
             self.img_ref = None
             return
         try:
-            # screenshot van target monitor
             img = ImageGrab.grab(bbox=(self.sx, self.sy, self.sr, self.sb))
-            # blur
             img = img.filter(ImageFilter.GaussianBlur(radius=BLUR_RADIUS))
-            # verdonkeren (dim) door mengen met zwart
             if DIM_ALPHA > 0:
-                black = Image.new("RGB", img.size, (0,0,0))
+                black = Image.new("RGB", img.size, (0, 0, 0))
                 img = Image.blend(img, black, DIM_ALPHA)
             tkimg = ImageTk.PhotoImage(img)
             self.img_ref = tkimg
             self.bg_label.configure(image=self.img_ref, bg="")
         except Exception:
-            # Fallback op effen kleur als iets misgaat
             self.bg_label.configure(bg=BG_FALLBACK, image="")
             self.img_ref = None
 
     # ---- overlay tonen/verbergen ----
     def show_overlay(self):
-        # refresh blur bij elke lock, zodat achtergrond actueel is
         self._render_blur()
         self.overlay.deiconify()
         self.overlay.lift()
@@ -151,17 +145,17 @@ class SacoaOverlayApp:
     def hide_overlay(self):
         self.overlay.withdraw()
 
-    # ---- handle trigger van seriële poort ----
+    # ---- seriële triggers ----
     def on_serial_trigger(self):
         now = time.time()
         if now - self.last_trigger < TRIGGER_MIN_INTERVAL:
             return
         self.last_trigger = now
 
-        # Ontgrendel: overlay weg
+        # Overlay verbergen
         self.hide_overlay()
 
-        # (Her)start auto-relock timer
+        # Auto-relock timer
         if self.relock_timer:
             try:
                 self.relock_timer.cancel()
@@ -175,12 +169,10 @@ class SacoaOverlayApp:
             self.relock_timer.start()
 
     def _relock(self):
-        # terug naar overlay (UI-veilig via main thread)
         self.root.after(0, self.show_overlay)
 
     # ---- seriële lees-loop ----
     def _serial_loop(self):
-        """Probeert COM-poort te openen; leest bytes/regels en triggert bij binnenkomende puls/tekst."""
         ser = None
         while True:
             try:
@@ -191,24 +183,19 @@ class SacoaOverlayApp:
                         time.sleep(1.0)
                         continue
 
-                # Lees binnenkomende data. We accepteren elke niet-lege regel als trigger.
-                data = ser.readline()  # tot \n of timeout
+                data = ser.readline()
                 if data:
                     line = data.decode(errors="ignore").strip()
-                    if line != "":
-                        # trigger!
+                    if line:
                         self.root.after(0, self.on_serial_trigger)
-                        # korte rust om spamming te voorkomen
                         time.sleep(0.1)
                 else:
-                    # ook korte poll op bytes direct
                     b = ser.read(1)
                     if b:
                         self.root.after(0, self.on_serial_trigger)
                         time.sleep(0.1)
 
             except Exception:
-                # bij fout: sluit en probeer opnieuw te openen
                 try:
                     if ser:
                         ser.close()
