@@ -1,9 +1,9 @@
-# sacoa_overlay_lock.py  (v1.3.9 – egaal blur via Canvas, clear on close, Ctrl+Alt+Q to quit)
-# - Egaal geblurde overlay (geen gekleurde vlakken) met NL/EN/DE tekst
-# - Service-knop met numpad (1423), toetsenbordinput
+# sacoa_overlay_lock.py  (v1.3.10 – Ctrl+Alt+Q werkt, focus fix, clean close; blur via Canvas)
+# - Egaal geblurde overlay (Canvas) zonder kleurvlakken
+# - Service-knop + numpad (PIN 1423), toetsenbordinput
 # - Seriële trigger (ESP32) + auto-relock
-# - Sluiten: Ctrl+Alt+Q
-# - Sluiten met kruisje van service-venster wist ingevoerde code
+# - Ctrl+Alt+Q sluit de app (zowel overlay als service-venster)
+# - Sluiten met het kruisje wist altijd de (gedeeltelijke) invoer
 
 import tkinter as tk
 from tkinter import messagebox
@@ -11,7 +11,7 @@ import ctypes, sys
 from ctypes import wintypes
 import threading, time
 
-# ====== CONFIG ======
+# === CONFIG ===
 SCREEN_INDEX = 0
 AUTO_RELOCK_SECONDS = 90
 COM_PORT = "COM5"
@@ -27,7 +27,7 @@ SUB_FONT   = ("Segoe UI", 22)
 SERVICE_W, SERVICE_H = 150, 45
 SERVICE_MARGIN = 40
 
-# ====== deps ======
+# === deps ===
 try:
     from PIL import ImageGrab, ImageFilter, Image, ImageTk
     HAS_PIL = True
@@ -39,7 +39,7 @@ try:
 except Exception:
     HAS_SERIAL = False
 
-# ====== monitor helpers ======
+# === monitor helpers ===
 user32 = ctypes.windll.user32
 user32.SetProcessDPIAware()
 MONITORENUMPROC = ctypes.WINFUNCTYPE(
@@ -80,15 +80,13 @@ class SacoaOverlayApp:
         self.mask_var = None
 
         self._build_overlay()
+        self._enable_quit_hotkey()
         self.show_overlay()
-
-        # globale hotkey (binnen de app) om te sluiten
-        self.root.bind_all("<Control-Alt-q>", lambda e: sys.exit(0))
 
         if HAS_SERIAL:
             threading.Thread(target=self._serial_loop, daemon=True).start()
 
-    # ---------- OVERLAY ----------
+    # ---------- overlay ----------
     def _build_overlay(self):
         self.overlay = tk.Toplevel(self.root)
         self.overlay.withdraw()
@@ -96,11 +94,11 @@ class SacoaOverlayApp:
         self.overlay.attributes("-topmost", True)
         self.overlay.geometry(f"{self.swidth}x{self.sheight}+{self.sx}+{self.sy}")
 
-        # Canvas i.p.v. Label → teksten zonder achtergrond, alles egaal geblurd
+        # Canvas (voor blur + tekst zonder achtergrond)
         self.canvas = tk.Canvas(self.overlay, highlightthickness=0, bd=0)
         self.canvas.pack(fill="both", expand=True)
 
-        # Service-knop rechtsonder (bovenop canvas)
+        # Service-knop rechtsonder
         self.service_btn = tk.Button(
             self.overlay, text="Service", font=("Segoe UI", 11, "bold"),
             bg="#F2F2F7", activebackground="#E6E6EC", relief="raised",
@@ -113,7 +111,7 @@ class SacoaOverlayApp:
 
     def _render_blur(self):
         if not HAS_PIL:
-            self.canvas.configure(bg="black")
+            self.canvas.configure(bg="black"); self.canvas.delete("all")
             return
         try:
             img = ImageGrab.grab(bbox=(self.sx, self.sy, self.sr, self.sb))
@@ -123,44 +121,61 @@ class SacoaOverlayApp:
                 img = Image.blend(img, black, DIM_ALPHA)
             self.img_ref = ImageTk.PhotoImage(img)
             self.canvas.delete("all")
-            # achtergrond
             self.canvas.create_image(0, 0, anchor="nw", image=self.img_ref)
-            # teksten op blur (geen bg!)
             cx, cy = self.swidth//2, self.sheight//2
-            self.canvas.create_text(
-                cx, cy-30, text="Scan uw pasje om te activeren",
-                fill="white", font=TITLE_FONT, anchor="s"
-            )
-            self.canvas.create_text(
-                cx, cy+5, text="Scan your card to activate",
-                fill="#DDDDFF", font=SUB_FONT, anchor="n"
-            )
-            self.canvas.create_text(
-                cx, cy+38, text="Bitte Karte scannen zum Aktivieren",
-                fill="#DDDDFF", font=SUB_FONT, anchor="n"
-            )
+            self.canvas.create_text(cx, cy-30,
+                                    text="Scan uw pasje om te activeren",
+                                    fill="white", font=TITLE_FONT, anchor="s")
+            self.canvas.create_text(cx, cy+5,
+                                    text="Scan your card to activate",
+                                    fill="#DDDDFF", font=SUB_FONT, anchor="n")
+            self.canvas.create_text(cx, cy+38,
+                                    text="Bitte Karte scannen zum Aktivieren",
+                                    fill="#DDDDFF", font=SUB_FONT, anchor="n")
         except Exception:
-            self.canvas.configure(bg="black")
-            self.canvas.delete("all")
+            self.canvas.configure(bg="black"); self.canvas.delete("all")
 
     def show_overlay(self):
         self._render_blur()
         self.overlay.deiconify()
         self.overlay.lift()
         self.overlay.attributes("-topmost", True)
+        # belangrijk: focus zodat hotkeys werken
+        try:
+            self.canvas.focus_set()
+        except Exception:
+            pass
 
     def hide_overlay(self):
         self.overlay.withdraw()
 
-    # ---------- SERVICE / KEYPAD ----------
+    # ---------- quit hotkey ----------
+    def _enable_quit_hotkey(self):
+        # meerdere varianten voor robuustheid
+        for seq in ("<Control-Alt-Key-q>", "<Control-Alt-Key-Q>",
+                    "<Control-Alt-q>", "<Control-Alt-Q>"):
+            self.root.bind_all(seq, self._quit)
+
+    def _quit(self, event=None):
+        try:
+            if self.keypad_win and self.keypad_win.winfo_exists():
+                self.keypad_win.destroy()
+            if self.overlay and self.overlay.winfo_exists():
+                self.overlay.destroy()
+        finally:
+            try:
+                self.root.destroy()
+            except Exception:
+                pass
+            sys.exit(0)
+
+    # ---------- service / keypad ----------
     def _on_service_pressed(self):
         self._show_keypad()
 
     def _show_keypad(self):
         if self.keypad_win and self.keypad_win.winfo_exists():
-            self.keypad_win.deiconify()
-            self.keypad_win.lift()
-            self.keypad_win.focus_set()
+            self.keypad_win.deiconify(); self.keypad_win.lift(); self.keypad_win.focus_set()
             return
 
         self.keypad_win = tk.Toplevel(self.root)
@@ -173,8 +188,13 @@ class SacoaOverlayApp:
         self.keypad_win.configure(bg="#111122")
         self.keypad_win.resizable(False, False)
 
-        # bij sluiten met X: wis invoer en sluit venster
+        # bij sluiten met X → wissen
         self.keypad_win.protocol("WM_DELETE_WINDOW", self._on_keypad_close)
+
+        # ook hier de quit-hotkey voor de zekerheid
+        for seq in ("<Control-Alt-Key-q>", "<Control-Alt-Key-Q>",
+                    "<Control-Alt-q>", "<Control-Alt-Q>"):
+            self.keypad_win.bind(seq, self._quit)
 
         self.mask_var = tk.StringVar(value="")
         tk.Label(self.keypad_win, textvariable=self.mask_var,
@@ -185,7 +205,6 @@ class SacoaOverlayApp:
         btn_font = ("Segoe UI", 18)
         btn_w, btn_h = 6, 1
         pad = dict(padx=6, pady=6)
-
         labels = [["1","2","3"], ["4","5","6"], ["7","8","9"], ["Wissen","0","⌫"]]
         for r, row in enumerate(labels):
             for c, lab in enumerate(row):
@@ -206,11 +225,15 @@ class SacoaOverlayApp:
         self.keypad_win.focus_set()
 
     def _on_keypad_close(self):
-        # Wissen bij sluiten met kruisje
         self.entered = ""
         if self.mask_var is not None:
             self.mask_var.set("")
         self.keypad_win.withdraw()
+        # focus terug naar overlay zodat Ctrl+Alt+Q daar ook werkt
+        try:
+            self.canvas.focus_set()
+        except Exception:
+            pass
 
     def _kb_type(self, event):
         ch = event.char
@@ -253,7 +276,7 @@ class SacoaOverlayApp:
             self.keypad_win.after(900, lambda: self.mask_var.set(""))
             self.entered = ""
 
-    # ---------- SERIAL ----------
+    # ---------- serial ----------
     def on_serial_trigger(self):
         now = time.time()
         if now - self.last_trigger < TRIGGER_MIN_INTERVAL:
@@ -297,7 +320,7 @@ class SacoaOverlayApp:
 
 def main():
     root = tk.Tk()
-    app = SacoaOverlayApp(root)
+    SacoaOverlayApp(root)
     root.mainloop()
 
 if __name__ == "__main__":
