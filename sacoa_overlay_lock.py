@@ -1,9 +1,8 @@
-# sacoa_overlay_lock.py  (v1.3.10 – Ctrl+Alt+Q werkt, focus fix, clean close; blur via Canvas)
-# - Egaal geblurde overlay (Canvas) zonder kleurvlakken
+# sacoa_overlay_lock.py  (v1.3.11 – geen hotkey, Task Manager boven overlay, extra spacing)
+# - Egaal blur via Canvas, geen kleurvlakken
 # - Service-knop + numpad (PIN 1423), toetsenbordinput
 # - Seriële trigger (ESP32) + auto-relock
-# - Ctrl+Alt+Q sluit de app (zowel overlay als service-venster)
-# - Sluiten met het kruisje wist altijd de (gedeeltelijke) invoer
+# - Verliest overlay-focus (Ctrl+Shift+Esc / Ctrl+Alt+Del) -> overlay wordt tijdelijk niet-topmost
 
 import tkinter as tk
 from tkinter import messagebox
@@ -80,7 +79,6 @@ class SacoaOverlayApp:
         self.mask_var = None
 
         self._build_overlay()
-        self._enable_quit_hotkey()
         self.show_overlay()
 
         if HAS_SERIAL:
@@ -91,12 +89,18 @@ class SacoaOverlayApp:
         self.overlay = tk.Toplevel(self.root)
         self.overlay.withdraw()
         self.overlay.overrideredirect(True)
-        self.overlay.attributes("-topmost", True)
+        self.overlay.attributes("-topmost", True)  # start topmost
         self.overlay.geometry(f"{self.swidth}x{self.sheight}+{self.sx}+{self.sy}")
 
-        # Canvas (voor blur + tekst zonder achtergrond)
+        # Canvas (blur + tekst)
         self.canvas = tk.Canvas(self.overlay, highlightthickness=0, bd=0)
         self.canvas.pack(fill="both", expand=True)
+
+        # Focus-bindings: als overlay/canvas focus verliest (Task Manager, Alt+Tab, etc.)
+        # -> tijdelijk niet-topmost zodat je erbij kunt; bij terugkomst weer topmost.
+        for w in (self.overlay, self.canvas):
+            w.bind("<FocusOut>", lambda e: self._set_topmost(False))
+            w.bind("<FocusIn>",  lambda e: self._set_topmost(True))
 
         # Service-knop rechtsonder
         self.service_btn = tk.Button(
@@ -108,6 +112,14 @@ class SacoaOverlayApp:
             x=self.swidth - SERVICE_MARGIN, y=self.sheight - SERVICE_MARGIN,
             anchor="se", width=SERVICE_W, height=SERVICE_H
         )
+
+    def _set_topmost(self, is_top):
+        try:
+            self.overlay.attributes("-topmost", bool(is_top))
+            if is_top:
+                self.overlay.lift()
+        except Exception:
+            pass
 
     def _render_blur(self):
         if not HAS_PIL:
@@ -123,13 +135,14 @@ class SacoaOverlayApp:
             self.canvas.delete("all")
             self.canvas.create_image(0, 0, anchor="nw", image=self.img_ref)
             cx, cy = self.swidth//2, self.sheight//2
+            # extra ruimte tussen EN en DE: +22px
             self.canvas.create_text(cx, cy-30,
                                     text="Scan uw pasje om te activeren",
                                     fill="white", font=TITLE_FONT, anchor="s")
-            self.canvas.create_text(cx, cy+5,
+            self.canvas.create_text(cx, cy+6,
                                     text="Scan your card to activate",
                                     fill="#DDDDFF", font=SUB_FONT, anchor="n")
-            self.canvas.create_text(cx, cy+38,
+            self.canvas.create_text(cx, cy+28,
                                     text="Bitte Karte scannen zum Aktivieren",
                                     fill="#DDDDFF", font=SUB_FONT, anchor="n")
         except Exception:
@@ -139,8 +152,7 @@ class SacoaOverlayApp:
         self._render_blur()
         self.overlay.deiconify()
         self.overlay.lift()
-        self.overlay.attributes("-topmost", True)
-        # belangrijk: focus zodat hotkeys werken
+        self._set_topmost(True)
         try:
             self.canvas.focus_set()
         except Exception:
@@ -148,26 +160,6 @@ class SacoaOverlayApp:
 
     def hide_overlay(self):
         self.overlay.withdraw()
-
-    # ---------- quit hotkey ----------
-    def _enable_quit_hotkey(self):
-        # meerdere varianten voor robuustheid
-        for seq in ("<Control-Alt-Key-q>", "<Control-Alt-Key-Q>",
-                    "<Control-Alt-q>", "<Control-Alt-Q>"):
-            self.root.bind_all(seq, self._quit)
-
-    def _quit(self, event=None):
-        try:
-            if self.keypad_win and self.keypad_win.winfo_exists():
-                self.keypad_win.destroy()
-            if self.overlay and self.overlay.winfo_exists():
-                self.overlay.destroy()
-        finally:
-            try:
-                self.root.destroy()
-            except Exception:
-                pass
-            sys.exit(0)
 
     # ---------- service / keypad ----------
     def _on_service_pressed(self):
@@ -187,14 +179,7 @@ class SacoaOverlayApp:
         self.keypad_win.geometry(f"{kw}x{kh}+{kx}+{ky}")
         self.keypad_win.configure(bg="#111122")
         self.keypad_win.resizable(False, False)
-
-        # bij sluiten met X → wissen
         self.keypad_win.protocol("WM_DELETE_WINDOW", self._on_keypad_close)
-
-        # ook hier de quit-hotkey voor de zekerheid
-        for seq in ("<Control-Alt-Key-q>", "<Control-Alt-Key-Q>",
-                    "<Control-Alt-q>", "<Control-Alt-Q>"):
-            self.keypad_win.bind(seq, self._quit)
 
         self.mask_var = tk.StringVar(value="")
         tk.Label(self.keypad_win, textvariable=self.mask_var,
@@ -202,9 +187,7 @@ class SacoaOverlayApp:
                  width=22, height=1).pack(pady=(10, 6))
 
         grid = tk.Frame(self.keypad_win, bg="#111122"); grid.pack(pady=6)
-        btn_font = ("Segoe UI", 18)
-        btn_w, btn_h = 6, 1
-        pad = dict(padx=6, pady=6)
+        btn_font = ("Segoe UI", 18); btn_w, btn_h = 6, 1; pad = dict(padx=6, pady=6)
         labels = [["1","2","3"], ["4","5","6"], ["7","8","9"], ["Wissen","0","⌫"]]
         for r, row in enumerate(labels):
             for c, lab in enumerate(row):
@@ -229,11 +212,8 @@ class SacoaOverlayApp:
         if self.mask_var is not None:
             self.mask_var.set("")
         self.keypad_win.withdraw()
-        # focus terug naar overlay zodat Ctrl+Alt+Q daar ook werkt
-        try:
-            self.canvas.focus_set()
-        except Exception:
-            pass
+        try: self.canvas.focus_set()
+        except Exception: pass
 
     def _kb_type(self, event):
         ch = event.char
