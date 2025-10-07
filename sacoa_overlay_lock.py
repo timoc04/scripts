@@ -8,7 +8,7 @@ Benodigd op een nieuwe PC:
 
 Starttips:
 - Start met:  pythonw sacoa_overlay_lock.py   (geen consolevenster)
-- Taakplanner: Programma/script = pythonw.exe, Argumenten = <pad>\sacoa_overlay_lock.py, Beginnen in = C:<pad>
+- Taakplanner: Programma/script = pythonw.exe, Argumenten = <pad>\sacoa_overlay_lock.py, Beginnen in = C:\<pad>
 """
 
 import tkinter as tk
