@@ -1,8 +1,9 @@
-# sacoa_overlay_lock.py  (v1.3.10-nohotkey – blur via Canvas, altijd topmost, extra regelafstand)
-# - Egaal geblurde overlay (Canvas) zonder kleurvlakken
-# - Service-knop + numpad (PIN 1423), toetsenbordinput
+# sacoa_overlay_lock.py  (v1.3.13 – EN/DE hoger + service auto-close 30s)
+# - Blur via Canvas, altijd topmost
+# - Service-numpad (PIN 1423) met keyboard
+# - Service-venster sluit automatisch na 30s inactiviteit (reset bij input)
 # - Seriële trigger (ESP32) + auto-relock
-# - Sluiten met het kruisje wist altijd de (gedeeltelijke) invoer
+# - Sluiten met X wist invoer
 
 import tkinter as tk
 from tkinter import messagebox
@@ -17,6 +18,7 @@ COM_PORT = "COM5"
 BAUDRATE = 9600
 TRIGGER_MIN_INTERVAL = 1.0
 SERVICE_PIN = "1423"
+SERVICE_AUTOCLOSE_SEC = 30  # nieuw: auto-close timer
 
 # UI
 BLUR_RADIUS = 12
@@ -77,6 +79,7 @@ class SacoaOverlayApp:
         self.keypad_win = None
         self.entered = ""
         self.mask_var = None
+        self.service_after_id = None  # nieuw: timer id
 
         self._build_overlay()
         self.show_overlay()
@@ -92,11 +95,9 @@ class SacoaOverlayApp:
         self.overlay.attributes("-topmost", True)
         self.overlay.geometry(f"{self.swidth}x{self.sheight}+{self.sx}+{self.sy}")
 
-        # Canvas (voor blur + tekst zonder achtergrond)
         self.canvas = tk.Canvas(self.overlay, highlightthickness=0, bd=0)
         self.canvas.pack(fill="both", expand=True)
 
-        # Service-knop rechtsonder
         self.service_btn = tk.Button(
             self.overlay, text="Service", font=("Segoe UI", 11, "bold"),
             bg="#F2F2F7", activebackground="#E6E6EC", relief="raised",
@@ -120,15 +121,16 @@ class SacoaOverlayApp:
             self.img_ref = ImageTk.PhotoImage(img)
             self.canvas.delete("all")
             self.canvas.create_image(0, 0, anchor="nw", image=self.img_ref)
+
+            # Teksten – EN/DE iets dichter onder NL
             cx, cy = self.swidth//2, self.sheight//2
-            # Extra spacing tussen EN en DE (vallen niet meer over elkaar)
             self.canvas.create_text(cx, cy-40,
                                     text="Scan uw pasje om te activeren",
                                     fill="white", font=TITLE_FONT, anchor="s")
-            self.canvas.create_text(cx, cy+5,
+            self.canvas.create_text(cx, cy-2,     # omhoog t.o.v. vorige
                                     text="Scan your card to activate",
                                     fill="#DDDDFF", font=SUB_FONT, anchor="n")
-            self.canvas.create_text(cx, cy+45,
+            self.canvas.create_text(cx, cy+30,    # ~32 px tussen EN en DE
                                     text="Bitte Karte scannen zum Aktivieren",
                                     fill="#DDDDFF", font=SUB_FONT, anchor="n")
         except Exception:
@@ -139,10 +141,8 @@ class SacoaOverlayApp:
         self.overlay.deiconify()
         self.overlay.lift()
         self.overlay.attributes("-topmost", True)
-        try:
-            self.canvas.focus_set()
-        except Exception:
-            pass
+        try: self.canvas.focus_set()
+        except Exception: pass
 
     def hide_overlay(self):
         self.overlay.withdraw()
@@ -151,9 +151,29 @@ class SacoaOverlayApp:
     def _on_service_pressed(self):
         self._show_keypad()
 
+    def _start_service_timer(self):
+        self._cancel_service_timer()
+        if SERVICE_AUTOCLOSE_SEC > 0 and self.keypad_win and self.keypad_win.winfo_exists():
+            self.service_after_id = self.keypad_win.after(
+                SERVICE_AUTOCLOSE_SEC * 1000, self._on_keypad_close
+            )
+
+    def _cancel_service_timer(self):
+        try:
+            if self.keypad_win and self.service_after_id:
+                self.keypad_win.after_cancel(self.service_after_id)
+        except Exception:
+            pass
+        self.service_after_id = None
+
+    def _activity(self):
+        # call bij elke input om timer te resetten
+        self._start_service_timer()
+
     def _show_keypad(self):
         if self.keypad_win and self.keypad_win.winfo_exists():
             self.keypad_win.deiconify(); self.keypad_win.lift(); self.keypad_win.focus_set()
+            self._start_service_timer()
             return
 
         self.keypad_win = tk.Toplevel(self.root)
@@ -165,8 +185,6 @@ class SacoaOverlayApp:
         self.keypad_win.geometry(f"{kw}x{kh}+{kx}+{ky}")
         self.keypad_win.configure(bg="#111122")
         self.keypad_win.resizable(False, False)
-
-        # bij sluiten met X → wissen
         self.keypad_win.protocol("WM_DELETE_WINDOW", self._on_keypad_close)
 
         self.mask_var = tk.StringVar(value="")
@@ -175,37 +193,38 @@ class SacoaOverlayApp:
                  width=22, height=1).pack(pady=(10, 6))
 
         grid = tk.Frame(self.keypad_win, bg="#111122"); grid.pack(pady=6)
-        btn_font = ("Segoe UI", 18)
-        btn_w, btn_h = 6, 1
-        pad = dict(padx=6, pady=6)
+        btn_font = ("Segoe UI", 18); btn_w, btn_h = 6, 1; pad = dict(padx=6, pady=6)
         labels = [["1","2","3"], ["4","5","6"], ["7","8","9"], ["Wissen","0","⌫"]]
         for r, row in enumerate(labels):
             for c, lab in enumerate(row):
                 tk.Button(grid, text=lab, font=btn_font, width=btn_w, height=btn_h,
-                          command=lambda x=lab: self._keypad_press(x))\
+                          command=lambda x=lab: (self._keypad_press(x), self._activity()))\
                     .grid(row=r, column=c, **pad)
 
         tk.Button(self.keypad_win, text="ONTGRENDEL",
                   font=("Segoe UI", 18, "bold"), bg="#3A6FF2", fg="white",
-                  command=self._keypad_try_unlock)\
+                  command=lambda: (self._keypad_try_unlock(), self._activity()))\
             .pack(fill="x", padx=16, pady=(8, 10))
 
-        # Keyboard support
-        self.keypad_win.bind("<Key>", self._kb_type)
-        self.keypad_win.bind("<BackSpace>", self._kb_backspace)
-        self.keypad_win.bind("<Escape>", self._kb_clear)
-        self.keypad_win.bind("<Return>", lambda e: self._keypad_try_unlock())
+        # Keyboard support + activity reset
+        self.keypad_win.bind("<Key>", lambda e: (self._kb_type(e), self._activity()))
+        self.keypad_win.bind("<BackSpace>", lambda e: (self._kb_backspace(e), self._activity()))
+        self.keypad_win.bind("<Escape>", lambda e: (self._kb_clear(e), self._activity()))
+        self.keypad_win.bind("<Return>", lambda e: (self._keypad_try_unlock(), self._activity()))
         self.keypad_win.focus_set()
 
+        # start timer bij openen
+        self._start_service_timer()
+
     def _on_keypad_close(self):
+        self._cancel_service_timer()
         self.entered = ""
         if self.mask_var is not None:
             self.mask_var.set("")
-        self.keypad_win.withdraw()
-        try:
-            self.canvas.focus_set()
-        except Exception:
-            pass
+        if self.keypad_win and self.keypad_win.winfo_exists():
+            self.keypad_win.withdraw()
+        try: self.canvas.focus_set()
+        except Exception: pass
 
     def _kb_type(self, event):
         ch = event.char
@@ -245,7 +264,8 @@ class SacoaOverlayApp:
             self.relock_timer = None
         else:
             self.mask_var.set("Foutieve code")
-            self.keypad_win.after(900, lambda: self.mask_var.set(""))
+            if self.keypad_win and self.keypad_win.winfo_exists():
+                self.keypad_win.after(900, lambda: self.mask_var.set(""))
             self.entered = ""
 
     # ---------- serial ----------
