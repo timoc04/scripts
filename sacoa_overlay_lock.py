@@ -1,8 +1,8 @@
-# sacoa_overlay_lock.py  (v1.3.6 – keypad netter: breder + ontgrendel goed in venster)
-# - Blur overlay met NL/EN/DE tekst
-# - Seriële trigger (ESP32) ontgrendelt; auto-relock
-# - Service-knop rechtsonder in de overlay
-# - Numpad compact + toetsenbord: 0–9, Enter=ontgrendel, Backspace, Esc=wissen
+# sacoa_overlay_lock.py  (v1.3.7 – keypad breder, platter, perfect passend)
+# Blur overlay met NL/EN/DE tekst
+# Seriële trigger (ESP32)
+# Service-knop rechtsonder
+# Numpad met toetsenbord en optimale layout
 
 import tkinter as tk
 from tkinter import messagebox
@@ -27,7 +27,7 @@ SUB_FONT   = ("Segoe UI", 22)
 SERVICE_W, SERVICE_H = 150, 45
 SERVICE_MARGIN = 40
 
-# ====== deps ======
+# ====== Deps ======
 try:
     from PIL import ImageGrab, ImageFilter, Image, ImageTk
     HAS_PIL = True
@@ -39,7 +39,7 @@ try:
 except Exception:
     HAS_SERIAL = False
 
-# ====== monitor helpers ======
+# ====== Monitor helpers ======
 user32 = ctypes.windll.user32
 user32.SetProcessDPIAware()
 MONITORENUMPROC = ctypes.WINFUNCTYPE(
@@ -96,7 +96,7 @@ class SacoaOverlayApp:
         self.bg_label = tk.Label(self.overlay, bg=BG_FALLBACK)
         self.bg_label.pack(fill="both", expand=True)
 
-        text_frame = tk.Frame(self.overlay, bg=BG_FALLBACK, highlightthickness=0)
+        text_frame = tk.Frame(self.overlay, bg=BG_FALLBACK)
         text_frame.place(relx=0.5, rely=0.5, anchor="center")
 
         tk.Label(text_frame, text="Scan uw pasje om te activeren",
@@ -106,7 +106,7 @@ class SacoaOverlayApp:
         tk.Label(text_frame, text="Bitte Karte scannen zum Aktivieren",
                  font=SUB_FONT, fg="#DDDDFF", bg=BG_FALLBACK).pack()
 
-        # Service-knop rechtsonder in de overlay
+        # Service-knop
         self.service_btn = tk.Button(
             self.overlay, text="Service", font=("Segoe UI", 11, "bold"),
             bg="#F2F2F7", activebackground="#E6E6EC", relief="raised",
@@ -154,11 +154,11 @@ class SacoaOverlayApp:
             self.keypad_win.focus_set()
             return
 
-        # venster iets breder/ hoger; fixed size
+        # venster iets breder, minder hoog
         self.keypad_win = tk.Toplevel(self.root)
         self.keypad_win.attributes("-topmost", True)
         self.keypad_win.title("Service")
-        kw, kh = 400, 560   # breder + hoger
+        kw, kh = 420, 520
         kx = self.sx + (self.swidth - kw) // 2
         ky = self.sy + (self.sheight - kh) // 2
         self.keypad_win.geometry(f"{kw}x{kh}+{kx}+{ky}")
@@ -170,12 +170,12 @@ class SacoaOverlayApp:
                  font=("Segoe UI", 22), bg="#22223A", fg="white",
                  width=22, height=1).pack(pady=(10, 6))
 
-        # grid-layout voor strakke uitlijning
+        # grid-layout
         grid = tk.Frame(self.keypad_win, bg=BG_FALLBACK)
         grid.pack(pady=6)
 
         btn_font = ("Segoe UI", 18)
-        btn_w, btn_h = 5, 2   # iets bredere knoppen
+        btn_w, btn_h = 6, 1   # breder, platter
         pad = dict(padx=6, pady=6)
 
         labels = [
@@ -190,14 +190,14 @@ class SacoaOverlayApp:
                           command=lambda x=lab: self._keypad_press(x))\
                     .grid(row=r, column=c, **pad)
 
-        # ONTGRENDEL over (bijna) volledige breedte
+        # ONTGRENDEL goed passend
         tk.Button(self.keypad_win, text="ONTGRENDEL",
                   font=("Segoe UI", 18, "bold"), bg="#3A6FF2", fg="white",
                   command=self._keypad_try_unlock)\
-            .pack(fill="x", padx=16, pady=(10, 12))
+            .pack(fill="x", padx=16, pady=(8, 10))
 
-        # Keyboard bindings
-        self.keypad_win.bind("<Key>", self._kb_type)            # 0–9
+        # Keyboard support
+        self.keypad_win.bind("<Key>", self._kb_type)
         self.keypad_win.bind("<BackSpace>", self._kb_backspace)
         self.keypad_win.bind("<Escape>", self._kb_clear)
         self.keypad_win.bind("<Return>", lambda e: self._keypad_try_unlock())
