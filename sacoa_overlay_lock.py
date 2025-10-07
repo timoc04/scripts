@@ -1,9 +1,8 @@
-# sacoa_overlay_lock.py  (v1.3.12 – Always Topmost + extra spacing EN/DE)
-# - Egaal blur via Canvas (geen kleurvlakken)
-# - Altijd topmost
-# - Service-knop + numpad (PIN 1423) met toetsenbord
+# sacoa_overlay_lock.py  (v1.3.10-nohotkey – blur via Canvas, altijd topmost, extra regelafstand)
+# - Egaal geblurde overlay (Canvas) zonder kleurvlakken
+# - Service-knop + numpad (PIN 1423), toetsenbordinput
 # - Seriële trigger (ESP32) + auto-relock
-# - Sluiten van service-venster (X) wist invoer
+# - Sluiten met het kruisje wist altijd de (gedeeltelijke) invoer
 
 import tkinter as tk
 from tkinter import messagebox
@@ -90,10 +89,10 @@ class SacoaOverlayApp:
         self.overlay = tk.Toplevel(self.root)
         self.overlay.withdraw()
         self.overlay.overrideredirect(True)
-        self.overlay.attributes("-topmost", True)  # always on top
+        self.overlay.attributes("-topmost", True)
         self.overlay.geometry(f"{self.swidth}x{self.sheight}+{self.sx}+{self.sy}")
 
-        # Canvas (blur + tekst zonder achtergrond)
+        # Canvas (voor blur + tekst zonder achtergrond)
         self.canvas = tk.Canvas(self.overlay, highlightthickness=0, bd=0)
         self.canvas.pack(fill="both", expand=True)
 
@@ -121,17 +120,15 @@ class SacoaOverlayApp:
             self.img_ref = ImageTk.PhotoImage(img)
             self.canvas.delete("all")
             self.canvas.create_image(0, 0, anchor="nw", image=self.img_ref)
-
-            # Tekstposities met extra ruimte:
-            # NL: midden-30, EN: midden+20, DE: midden+56  (ruim 36px tussen EN en DE)
             cx, cy = self.swidth//2, self.sheight//2
-            self.canvas.create_text(cx, cy-30,
+            # Extra spacing tussen EN en DE (vallen niet meer over elkaar)
+            self.canvas.create_text(cx, cy-40,
                                     text="Scan uw pasje om te activeren",
                                     fill="white", font=TITLE_FONT, anchor="s")
-            self.canvas.create_text(cx, cy+20,
+            self.canvas.create_text(cx, cy+5,
                                     text="Scan your card to activate",
                                     fill="#DDDDFF", font=SUB_FONT, anchor="n")
-            self.canvas.create_text(cx, cy+56,
+            self.canvas.create_text(cx, cy+45,
                                     text="Bitte Karte scannen zum Aktivieren",
                                     fill="#DDDDFF", font=SUB_FONT, anchor="n")
         except Exception:
@@ -142,6 +139,10 @@ class SacoaOverlayApp:
         self.overlay.deiconify()
         self.overlay.lift()
         self.overlay.attributes("-topmost", True)
+        try:
+            self.canvas.focus_set()
+        except Exception:
+            pass
 
     def hide_overlay(self):
         self.overlay.withdraw()
@@ -164,6 +165,8 @@ class SacoaOverlayApp:
         self.keypad_win.geometry(f"{kw}x{kh}+{kx}+{ky}")
         self.keypad_win.configure(bg="#111122")
         self.keypad_win.resizable(False, False)
+
+        # bij sluiten met X → wissen
         self.keypad_win.protocol("WM_DELETE_WINDOW", self._on_keypad_close)
 
         self.mask_var = tk.StringVar(value="")
@@ -172,7 +175,9 @@ class SacoaOverlayApp:
                  width=22, height=1).pack(pady=(10, 6))
 
         grid = tk.Frame(self.keypad_win, bg="#111122"); grid.pack(pady=6)
-        btn_font = ("Segoe UI", 18); btn_w, btn_h = 6, 1; pad = dict(padx=6, pady=6)
+        btn_font = ("Segoe UI", 18)
+        btn_w, btn_h = 6, 1
+        pad = dict(padx=6, pady=6)
         labels = [["1","2","3"], ["4","5","6"], ["7","8","9"], ["Wissen","0","⌫"]]
         for r, row in enumerate(labels):
             for c, lab in enumerate(row):
@@ -197,6 +202,10 @@ class SacoaOverlayApp:
         if self.mask_var is not None:
             self.mask_var.set("")
         self.keypad_win.withdraw()
+        try:
+            self.canvas.focus_set()
+        except Exception:
+            pass
 
     def _kb_type(self, event):
         ch = event.char
