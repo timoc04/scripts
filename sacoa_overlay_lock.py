@@ -1,8 +1,9 @@
-# sacoa_overlay_lock.py  (v1.3.11 – geen hotkey, Task Manager boven overlay, extra spacing)
-# - Egaal blur via Canvas, geen kleurvlakken
-# - Service-knop + numpad (PIN 1423), toetsenbordinput
+# sacoa_overlay_lock.py  (v1.3.12 – Always Topmost + extra spacing EN/DE)
+# - Egaal blur via Canvas (geen kleurvlakken)
+# - Altijd topmost
+# - Service-knop + numpad (PIN 1423) met toetsenbord
 # - Seriële trigger (ESP32) + auto-relock
-# - Verliest overlay-focus (Ctrl+Shift+Esc / Ctrl+Alt+Del) -> overlay wordt tijdelijk niet-topmost
+# - Sluiten van service-venster (X) wist invoer
 
 import tkinter as tk
 from tkinter import messagebox
@@ -89,18 +90,12 @@ class SacoaOverlayApp:
         self.overlay = tk.Toplevel(self.root)
         self.overlay.withdraw()
         self.overlay.overrideredirect(True)
-        self.overlay.attributes("-topmost", True)  # start topmost
+        self.overlay.attributes("-topmost", True)  # always on top
         self.overlay.geometry(f"{self.swidth}x{self.sheight}+{self.sx}+{self.sy}")
 
-        # Canvas (blur + tekst)
+        # Canvas (blur + tekst zonder achtergrond)
         self.canvas = tk.Canvas(self.overlay, highlightthickness=0, bd=0)
         self.canvas.pack(fill="both", expand=True)
-
-        # Focus-bindings: als overlay/canvas focus verliest (Task Manager, Alt+Tab, etc.)
-        # -> tijdelijk niet-topmost zodat je erbij kunt; bij terugkomst weer topmost.
-        for w in (self.overlay, self.canvas):
-            w.bind("<FocusOut>", lambda e: self._set_topmost(False))
-            w.bind("<FocusIn>",  lambda e: self._set_topmost(True))
 
         # Service-knop rechtsonder
         self.service_btn = tk.Button(
@@ -112,14 +107,6 @@ class SacoaOverlayApp:
             x=self.swidth - SERVICE_MARGIN, y=self.sheight - SERVICE_MARGIN,
             anchor="se", width=SERVICE_W, height=SERVICE_H
         )
-
-    def _set_topmost(self, is_top):
-        try:
-            self.overlay.attributes("-topmost", bool(is_top))
-            if is_top:
-                self.overlay.lift()
-        except Exception:
-            pass
 
     def _render_blur(self):
         if not HAS_PIL:
@@ -134,15 +121,17 @@ class SacoaOverlayApp:
             self.img_ref = ImageTk.PhotoImage(img)
             self.canvas.delete("all")
             self.canvas.create_image(0, 0, anchor="nw", image=self.img_ref)
+
+            # Tekstposities met extra ruimte:
+            # NL: midden-30, EN: midden+20, DE: midden+56  (ruim 36px tussen EN en DE)
             cx, cy = self.swidth//2, self.sheight//2
-            # extra ruimte tussen EN en DE: +22px
             self.canvas.create_text(cx, cy-30,
                                     text="Scan uw pasje om te activeren",
                                     fill="white", font=TITLE_FONT, anchor="s")
-            self.canvas.create_text(cx, cy+6,
+            self.canvas.create_text(cx, cy+20,
                                     text="Scan your card to activate",
                                     fill="#DDDDFF", font=SUB_FONT, anchor="n")
-            self.canvas.create_text(cx, cy+28,
+            self.canvas.create_text(cx, cy+56,
                                     text="Bitte Karte scannen zum Aktivieren",
                                     fill="#DDDDFF", font=SUB_FONT, anchor="n")
         except Exception:
@@ -152,11 +141,7 @@ class SacoaOverlayApp:
         self._render_blur()
         self.overlay.deiconify()
         self.overlay.lift()
-        self._set_topmost(True)
-        try:
-            self.canvas.focus_set()
-        except Exception:
-            pass
+        self.overlay.attributes("-topmost", True)
 
     def hide_overlay(self):
         self.overlay.withdraw()
@@ -212,8 +197,6 @@ class SacoaOverlayApp:
         if self.mask_var is not None:
             self.mask_var.set("")
         self.keypad_win.withdraw()
-        try: self.canvas.focus_set()
-        except Exception: pass
 
     def _kb_type(self, event):
         ch = event.char
