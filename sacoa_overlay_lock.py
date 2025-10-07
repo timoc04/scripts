@@ -1,8 +1,9 @@
-# sacoa_overlay_lock.py  (v1.3.5 – service-numpad: zichtbaar, geen 'Sluiten', keyboard support)
+# sacoa_overlay_lock.py  (v1.3.6 – keypad netter: breder + ontgrendel goed in venster)
 # - Blur overlay met NL/EN/DE tekst
 # - Seriële trigger (ESP32) ontgrendelt; auto-relock
 # - Service-knop rechtsonder in de overlay
 # - Numpad compact + toetsenbord: 0–9, Enter=ontgrendel, Backspace, Esc=wissen
+
 import tkinter as tk
 from tkinter import messagebox
 import ctypes
@@ -153,10 +154,11 @@ class SacoaOverlayApp:
             self.keypad_win.focus_set()
             return
 
+        # venster iets breder/ hoger; fixed size
         self.keypad_win = tk.Toplevel(self.root)
         self.keypad_win.attributes("-topmost", True)
         self.keypad_win.title("Service")
-        kw, kh = 360, 540   # iets hoger zodat de ontgrendel-knop altijd past
+        kw, kh = 400, 560   # breder + hoger
         kx = self.sx + (self.swidth - kw) // 2
         ky = self.sy + (self.sheight - kh) // 2
         self.keypad_win.geometry(f"{kw}x{kh}+{kx}+{ky}")
@@ -166,23 +168,33 @@ class SacoaOverlayApp:
         self.mask_var = tk.StringVar(value="")
         tk.Label(self.keypad_win, textvariable=self.mask_var,
                  font=("Segoe UI", 22), bg="#22223A", fg="white",
-                 width=16, height=1).pack(pady=(10, 6))
+                 width=22, height=1).pack(pady=(10, 6))
 
-        frame_keys = tk.Frame(self.keypad_win, bg=BG_FALLBACK); frame_keys.pack(pady=2)
+        # grid-layout voor strakke uitlijning
+        grid = tk.Frame(self.keypad_win, bg=BG_FALLBACK)
+        grid.pack(pady=6)
 
-        btn_cfg = {"font":("Segoe UI", 16), "width":4, "height":2}
-        labels = [["1","2","3"], ["4","5","6"], ["7","8","9"], ["Wissen","0","⌫"]]
-        for row in labels:
-            r = tk.Frame(frame_keys, bg=BG_FALLBACK); r.pack(pady=3)
-            for lab in row:
-                tk.Button(r, text=lab, command=lambda x=lab: self._keypad_press(x),
-                          **btn_cfg).pack(side="left", padx=3)
+        btn_font = ("Segoe UI", 18)
+        btn_w, btn_h = 5, 2   # iets bredere knoppen
+        pad = dict(padx=6, pady=6)
 
-        # Ontgrendelknop – past nu in het venster
+        labels = [
+            ["1","2","3"],
+            ["4","5","6"],
+            ["7","8","9"],
+            ["Wissen","0","⌫"]
+        ]
+        for r, row in enumerate(labels):
+            for c, lab in enumerate(row):
+                tk.Button(grid, text=lab, font=btn_font, width=btn_w, height=btn_h,
+                          command=lambda x=lab: self._keypad_press(x))\
+                    .grid(row=r, column=c, **pad)
+
+        # ONTGRENDEL over (bijna) volledige breedte
         tk.Button(self.keypad_win, text="ONTGRENDEL",
-                  font=("Segoe UI", 16, "bold"), bg="#3A6FF2", fg="white",
-                  command=self._keypad_try_unlock, width=22, height=1)\
-            .pack(pady=(10, 12))
+                  font=("Segoe UI", 18, "bold"), bg="#3A6FF2", fg="white",
+                  command=self._keypad_try_unlock)\
+            .pack(fill="x", padx=16, pady=(10, 12))
 
         # Keyboard bindings
         self.keypad_win.bind("<Key>", self._kb_type)            # 0–9
