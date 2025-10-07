@@ -1,7 +1,7 @@
-# sacoa_overlay_lock.py  (v1.3.1 – Service-knop zichtbaar/keep-alive + numpad 1423)
-# - Blur overlay met meertalige tekst
-# - Seriële trigger (ESP32) ontgrendelt; auto-relock
-# - Rechtsonder 'Service' knop (altijd zichtbaar, keep-alive). Numpad → code 1423 ontgrendelt.
+# sacoa_overlay_lock.py  (v1.3.2 – Service-knop ín de overlay + numpad 1423)
+# - Blur overlay met NL/EN/DE tekst
+# - Seriële trigger (ESP32) ontgrendelt; auto-relock na X sec
+# - Service-knop rechtsonder in de overlay; toont numpad; PIN 1423 ontgrendelt
 
 import tkinter as tk
 from tkinter import messagebox
@@ -19,16 +19,15 @@ TRIGGER_MIN_INTERVAL = 1.0
 
 SERVICE_PIN = "1423"
 
+# UI
 BLUR_RADIUS = 12
 DIM_ALPHA = 0.35
 BG_FALLBACK = "#111122"
 TITLE_FONT = ("Segoe UI", 40, "bold")
 SUB_FONT   = ("Segoe UI", 22)
 
-# Service-knop formaat/marge + keep-alive
 SERVICE_W, SERVICE_H = 150, 45
 SERVICE_MARGIN = 40
-KEEP_ALIVE_MS = 1000  # elke 1s knop bovenaan houden
 
 # ====== deps ======
 # pip install pillow pyserial
@@ -75,18 +74,17 @@ class SacoaOverlayApp:
         self.sheight = self.sb - self.sy
 
         self.overlay = None
+        self.bg_label = None
         self.img_ref = None
         self.last_trigger = 0.0
         self.relock_timer = None
 
-        self.service_win = None
         self.keypad_win = None
         self.entered = ""
+        self.mask_var = None
 
         self._build_overlay()
-        self._build_service_button()
         self.show_overlay()
-        self._keep_alive_service()  # <— belangrijk: knop blijven tonen
 
         if HAS_SERIAL:
             threading.Thread(target=self._serial_loop, daemon=True).start()
@@ -99,18 +97,32 @@ class SacoaOverlayApp:
         self.overlay.attributes("-topmost", True)
         self.overlay.geometry(f"{self.swidth}x{self.sheight}+{self.sx}+{self.sy}")
 
+        # achtergrond voor blur
         self.bg_label = tk.Label(self.overlay, bg=BG_FALLBACK)
         self.bg_label.pack(fill="both", expand=True)
 
-        self.text_frame = tk.Frame(self.bg_label, bg=BG_FALLBACK, highlightthickness=0)
-        self.text_frame.place(relx=0.5, rely=0.5, anchor="center")
+        # tekst in het midden
+        text_frame = tk.Frame(self.overlay, bg=BG_FALLBACK, highlightthickness=0)
+        text_frame.place(relx=0.5, rely=0.5, anchor="center")
 
-        tk.Label(self.text_frame, text="Scan uw pasje om te activeren",
+        tk.Label(text_frame, text="Scan uw pasje om te activeren",
                  font=TITLE_FONT, fg="white", bg=BG_FALLBACK).pack(pady=(0, 10))
-        tk.Label(self.text_frame, text="Scan your card to activate",
+        tk.Label(text_frame, text="Scan your card to activate",
                  font=SUB_FONT, fg="#DDDDFF", bg=BG_FALLBACK).pack()
-        tk.Label(self.text_frame, text="Bitte Karte scannen zum Aktivieren",
+        tk.Label(text_frame, text="Bitte Karte scannen zum Aktivieren",
                  font=SUB_FONT, fg="#DDDDFF", bg=BG_FALLBACK).pack()
+
+        # SERVICE-knop RECHTSONDER (in overlay zelf, dus altijd zichtbaar binnen de overlay)
+        self.service_btn = tk.Button(
+            self.overlay, text="Service", font=("Segoe UI", 11, "bold"),
+            bg="#F2F2F7", activebackground="#E6E6EC", relief="raised",
+            command=self._on_service_pressed
+        )
+        # vaste afmeting + positionering t.o.v. rechter/onderrand
+        self.service_btn.place(
+            x=self.swidth - SERVICE_MARGIN, y=self.sheight - SERVICE_MARGIN,
+            anchor="se", width=SERVICE_W, height=SERVICE_H
+        )
 
     def _render_blur(self):
         if not HAS_PIL:
@@ -134,61 +146,14 @@ class SacoaOverlayApp:
         self.overlay.deiconify()
         self.overlay.lift()
         self.overlay.attributes("-topmost", True)
-        self._show_service_button()  # zorg dat service boven overlay staat
 
     def hide_overlay(self):
         self.overlay.withdraw()
 
-    # ---------- service button ----------
-    def _build_service_button(self):
-        if self.service_win and self.service_win.winfo_exists():
-            return
-        self.service_win = tk.Toplevel(self.root)
-        self.service_win.overrideredirect(True)
-        self.service_win.attributes("-topmost", True)
-        self.service_win.configure(bg="#F2F2F7")
-
-        btn = tk.Button(self.service_win, text="Service",
-                        font=("Segoe UI", 11, "bold"),
-                        width=12, height=2,
-                        command=self._on_service_pressed,
-                        relief="raised", bg="#F2F2F7", activebackground="#E6E6EC")
-        btn.pack(fill="both", expand=True)
-
-        self._place_service_button()
-        self.service_win.deiconify()
-        self.service_win.lift()
-
-        self.service_win.bind("<Unmap>", lambda e: self.service_win.after(50, self._show_service_button))
-        self.service_win.bind("<Map>",   lambda e: self._place_service_button))
-
-    def _place_service_button(self):
-        # Houd rekening met DPI/posities
-        x = self.sx + max(0, self.swidth  - SERVICE_W - SERVICE_MARGIN)
-        y = self.sy + max(0, self.sheight - SERVICE_H - SERVICE_MARGIN)
-        self.service_win.geometry(f"{SERVICE_W}x{SERVICE_H}+{x}+{y}")
-
-    def _show_service_button(self):
-        try:
-            if not (self.service_win and self.service_win.winfo_exists()):
-                self._build_service_button()
-            else:
-                self.service_win.deiconify()
-                self._place_service_button()
-                self.service_win.lift()
-                self.service_win.attributes("-topmost", True)
-        except tk.TclError:
-            self._build_service_button()
-
-    def _keep_alive_service(self):
-        # hou de knop zichtbaar/bovenaan—ook als andere vensters focus krijgen
-        self._show_service_button()
-        self.root.after(KEEP_ALIVE_MS, self._keep_alive_service)
-
+    # ---------- service / keypad ----------
     def _on_service_pressed(self):
         self._show_keypad()
 
-    # ---------- keypad ----------
     def _show_keypad(self):
         if self.keypad_win and self.keypad_win.winfo_exists():
             self.keypad_win.deiconify()
@@ -248,7 +213,7 @@ class SacoaOverlayApp:
             if self.relock_timer:
                 try: self.relock_timer.cancel()
                 except Exception: pass
-                self.relock_timer = None
+            self.relock_timer = None
         else:
             prev = self.mask_var.get()
             self.mask_var.set("Foutieve code")
@@ -269,7 +234,7 @@ class SacoaOverlayApp:
         if self.relock_timer:
             try: self.relock_timer.cancel()
             except Exception: pass
-            self.relock_timer = None
+        self.relock_timer = None
         if AUTO_RELOCK_SECONDS > 0:
             self.relock_timer = threading.Timer(AUTO_RELOCK_SECONDS, lambda: self.root.after(0, self.show_overlay))
             self.relock_timer.daemon = True
