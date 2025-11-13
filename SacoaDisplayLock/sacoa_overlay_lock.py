@@ -31,7 +31,7 @@ SERVICE_PIN = "1423"              # code via Service-venster
 BLUR_RADIUS = 12
 DIM_ALPHA = 0.35
 TITLE_FONT = ("Segoe UI", 40, "bold")
-SUB_FONT   = ("Segoe UI", 22)
+SUB_FONT   = ("Segoe UI", 30)
 SERVICE_W, SERVICE_H = 150, 45
 SERVICE_MARGIN = 40
 
@@ -139,10 +139,10 @@ class SacoaOverlayApp:
             self.canvas.create_text(cx, cy-40,
                                     text="Scan uw pasje om te activeren",
                                     fill="white", font=TITLE_FONT, anchor="s")
-            self.canvas.create_text(cx, cy+5,
+            self.canvas.create_text(cx, cy-25,
                                     text="Scan your card to activate",
                                     fill="#DDDDFF", font=SUB_FONT, anchor="n")
-            self.canvas.create_text(cx, cy+45,
+            self.canvas.create_text(cx, cy+25,
                                     text="Bitte Karte scannen zum Aktivieren",
                                     fill="#DDDDFF", font=SUB_FONT, anchor="n")
         except Exception:
