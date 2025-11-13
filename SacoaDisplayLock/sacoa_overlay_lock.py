@@ -22,7 +22,7 @@ import threading, time
 SCREEN_INDEX = 0                  # 0 = primair, 1 = tweede, etc.
 START_LOCK_DELAY_SECONDS = 60     # overlay pas na X seconden tonen
 AUTO_RELOCK_SECONDS = 240         # na ontgrendelen automatisch weer locken
-COM_PORT = "COM5"                 # seriële poort van ESP32/adapter
+COM_PORT = "COM10"                # seriële poort van ESP32/adapter (in device manager als vaste poort instellen)
 BAUDRATE = 9600
 TRIGGER_MIN_INTERVAL = 1.0        # debounce tegen meerdere pulsen
 SERVICE_PIN = "1423"              # code via Service-venster
