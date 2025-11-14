@@ -1,5 +1,5 @@
 // === Seeed Studio XIAO ESP32C3 – Sacoa Spark trigger ===
-// Detecteert sluiting op D1 en stuurt 1 byte (0x55) via USB-serieel
+// Detecteert sluiting op D1 en stuurt het woord "TRIGGER" via USB-serieel
 
 const int PIN_PULSE = D1;
 const unsigned long DEBOUNCE_MS = 150;
@@ -18,7 +18,7 @@ void loop() {
 
   // Detecteer flank (hoog -> laag) met debounce
   if (lastState == HIGH && s == LOW && (now - lastMs) > DEBOUNCE_MS) {
-    Serial.write(0x55);               // Trigger-byte naar PC
+    Serial.println("TRIGGER");       // Stuur commando 'TRIGGER' naar PC
     lastMs = now;
   }
   lastState = s;
