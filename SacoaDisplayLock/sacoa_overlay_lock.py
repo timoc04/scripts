@@ -282,13 +282,22 @@ class SacoaOverlayApp:
                         ser = serial.Serial(COM_PORT, BAUDRATE, timeout=0.2)
                     except Exception:
                         time.sleep(1.0); continue
-                # alleen triggeren op byte 0x55 (U) van de ESP32
-                data = ser.readline()
-                if data == b'\x55':
+                # lees regels en bytes en reageer alleen op het commando 'TRIGGER'
+                raw = ser.readline()
+                try:
+                    data = raw.decode(errors="ignore").strip()
+                except AttributeError:
+                    # als pyserial al str teruggeeft
+                    data = (raw or "").strip()
+                if data == "TRIGGER":
                     self.root.after(0, self.on_serial_trigger); time.sleep(0.1)
                 else:
-                    b = ser.read(1)
-                    if b == b'\x55':
+                    raw = ser.read(16)
+                    try:
+                        bdata = raw.decode(errors="ignore").strip()
+                    except AttributeError:
+                        bdata = (raw or "").strip()
+                    if bdata == "TRIGGER":
                         self.root.after(0, self.on_serial_trigger); time.sleep(0.1)
             except Exception:
                 try:
