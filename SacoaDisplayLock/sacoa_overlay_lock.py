@@ -282,13 +282,13 @@ class SacoaOverlayApp:
                         ser = serial.Serial(COM_PORT, BAUDRATE, timeout=0.2)
                     except Exception:
                         time.sleep(1.0); continue
-                # elke byte of regel telt als puls
+                # alleen triggeren op byte 0x55 (U) van de ESP32
                 data = ser.readline()
-                if data and data.strip():
+                if data == b'\x55':
                     self.root.after(0, self.on_serial_trigger); time.sleep(0.1)
                 else:
                     b = ser.read(1)
-                    if b:
+                    if b == b'\x55':
                         self.root.after(0, self.on_serial_trigger); time.sleep(0.1)
             except Exception:
                 try:
